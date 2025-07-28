@@ -1,0 +1,2089 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  SafeAreaView,
+  Dimensions,
+  Modal,
+  ImageBackground, // <-- Add this import
+} from 'react-native';
+import Svg, { Path, Circle, Text as SvgText } from 'react-native-svg';
+import Header from '../components/Header';
+
+const PROJECTS = [
+  { name: 'Defect Tracker', status: 'high' },
+  { name: 'QA testing', status: 'high' },
+  { name: 'project 1', status: 'low' },
+  { name: 'Heart', status: 'low' },
+  { name: 'Dashbord testing', status: 'low' },
+  { name: 'JALI', status: 'low' },
+  { name: 'Hello world', status: 'low' },
+  { name: 'dashborad test', status: 'medium' },
+  { name: 'Defect Tracker', status: 'high' },
+];
+
+const STATUS: Record<'high' | 'medium' | 'low', { label: string; color: string; bg: string; border: string }> = {
+  high: { label: 'High Risk', color: '#e53935', bg: '#fff5f5', border: '#b71c1c' },
+  medium: { label: 'Medium Risk', color: '#fbbf24', bg: '#fffbe6', border: '#b45309' },
+  low: { label: 'Low Risk', color: '#22c55e', bg: '#f0fff4', border: '#166534' },
+};
+
+const DEFECT_CARDS = [
+  {
+    key: 'high',
+    title: 'Defects on High',
+    total: 124,
+    color: STATUS.high.color,
+    border: STATUS.high.border,
+    items: [
+      { label: 'REOPEN', color: '#e53935', value: 10 },
+      { label: 'NEW', color: '#2563eb', value: 53 },
+      { label: 'OPEN', color: '#eab308', value: 5 },
+      { label: 'FIXED', color: '#22c55e', value: 16 },
+      { label: 'CLOSED', color: '#166534', value: 37 },
+      { label: 'REJECTED', color: '#b91c1c', value: 0 },
+      { label: 'DUPLICATE', color: '#6b7280', value: 3 },
+    ],
+  },
+  {
+    key: 'medium',
+    title: 'Defects on Medium',
+    total: 238,
+    color: STATUS.medium.color,
+    border: STATUS.medium.border,
+    items: [
+      { label: 'REOPEN', color: '#e53935', value: 5 },
+      { label: 'NEW', color: '#2563eb', value: 129 },
+      { label: 'OPEN', color: '#eab308', value: 9 },
+      { label: 'FIXED', color: '#22c55e', value: 31 },
+      { label: 'CLOSED', color: '#166534', value: 61 },
+      { label: 'REJECTED', color: '#b91c1c', value: 2 },
+      { label: 'DUPLICATE', color: '#6b7280', value: 1 },
+    ],
+  },
+  {
+    key: 'low',
+    title: 'Defects on Low',
+    total: 97,
+    color: STATUS.low.color,
+    border: STATUS.low.border,
+    items: [
+      { label: 'REOPEN', color: '#e53935', value: 1 },
+      { label: 'NEW', color: '#2563eb', value: 59 },
+      { label: 'OPEN', color: '#eab308', value: 0 },
+      { label: 'FIXED', color: '#22c55e', value: 10 },
+      { label: 'CLOSED', color: '#166534', value: 23 },
+      { label: 'REJECTED', color: '#b91c1c', value: 1 },
+      { label: 'DUPLICATE', color: '#6b7280', value: 3 },
+    ],
+  },
+];
+
+const METRIC_CARDS = [
+  {
+    key: 'density',
+    title: 'Defect Density',
+    value: '0.00',
+    label: 'Defect Density:',
+    color: '#22c55e',
+    type: 'gauge',
+  },
+  {
+    key: 'severity',
+    title: 'Defect Severity Index',
+    value: '45',
+    label: 'Weighted severity score (higher = more severe defects)',
+    color: '#fbbf24',
+    type: 'score',
+  },
+  {
+    key: 'ratio',
+    title: 'Defect to Remark Ratio',
+    value: '97.82%',
+    label: 'Defect to Remark Ratio (%)',
+    color: '#fbbf24',
+    type: 'ratio',
+    badge: 'Medium',
+  },
+];
+
+const PIE_CARDS = [
+  {
+    key: 'reopened',
+    title: 'Defects Reopened Multiple Times',
+    chartColors: ['#3b82f6', '#fbbf24', '#ef4444', '#8b5cf6'],
+    chartData: [5, 1, 1, 1],
+    legend: [
+      { color: '#3b82f6', label: '2 times: 5 (62.5%)' },
+      { color: '#fbbf24', label: '4 times: 1 (12.5%)' },
+      { color: '#ef4444', label: '5 times: 1 (12.5%)' },
+      { color: '#8b5cf6', label: '>5 times: 1 (12.5%)' },
+    ],
+  },
+  {
+    key: 'type',
+    title: 'Defect Distribution by Type',
+    chartColors: ['#3b82f6', '#10b981', '#fbbf24', '#ef4444'],
+    chartData: [245, 81, 30, 103],
+    legend: [
+      { color: '#3b82f6', label: 'Functionality: 245 (53.4%)' },
+      { color: '#10b981', label: 'UI: 81 (17.6%)' },
+      { color: '#fbbf24', label: 'Usability: 30 (6.5%)' },
+      { color: '#ef4444', label: 'Validation: 103 (22.4%)' },
+    ],
+    total: 459,
+    mostCommon: { value: 245, label: 'Functionality' },
+  },
+  {
+    key: 'module',
+    title: 'Defects by Module',
+    chartColors: ['#3b82f6', '#10b981', '#fbbf24', '#ef4444', '#8b5cf6', '#f59e0b'],
+    chartData: [89, 76, 54, 43, 32, 25],
+    legend: [
+      { color: '#3b82f6', label: 'Authentication: 89 (27.9%)' },
+      { color: '#10b981', label: 'User Management: 76 (23.8%)' },
+      { color: '#fbbf24', label: 'Reporting: 54 (16.9%)' },
+      { color: '#ef4444', label: 'Dashboard: 43 (13.5%)' },
+      { color: '#8b5cf6', label: 'Settings: 32 (10.0%)' },
+      { color: '#f59e0b', label: 'API: 25 (7.8%)' },
+    ],
+    total: 319,
+    mostCommon: { value: 89, label: 'Authentication' },
+  },
+];
+
+const CHART_CARDS = [
+  {
+    key: 'reopened',
+    title: 'Defects Reopened Multiple Times',
+    type: 'pie',
+    legend: [
+      { color: '#3b82f6', label: '2 times: 5 (62.5%)' },
+      { color: '#fbbf24', label: '4 times: 1 (12.5%)' },
+      { color: '#ef4444', label: '5 times: 1 (12.5%)' },
+      { color: '#8b5cf6', label: '>5 times: 1 (12.5%)' },
+    ],
+  },
+  {
+    key: 'type',
+    title: 'Defect Distribution by Type',
+    type: 'pie',
+    legend: [
+      { color: '#3b82f6', label: 'Functionality: 245 (53.4%)' },
+      { color: '#10b981', label: 'UI: 81 (17.6%)' },
+      { color: '#fbbf24', label: 'Usability: 30 (6.5%)' },
+      { color: '#ef4444', label: 'Validation: 103 (22.4%)' },
+    ],
+    total: 459,
+    mostCommon: { value: 245, label: 'Functionality' },
+  },
+  {
+    key: 'find',
+    title: 'Time to Find Defects',
+    type: 'line',
+  },
+  {
+    key: 'fix',
+    title: 'Time to Fix Defects',
+    type: 'line',
+  },
+  {
+    key: 'module',
+    title: 'Defects by Module',
+    type: 'pie',
+    legend: [
+      { color: '#3b82f6', label: 'Authentication: 89 (27.9%)' },
+      { color: '#10b981', label: 'User Management: 76 (23.8%)' },
+      { color: '#fbbf24', label: 'Reporting: 54 (16.9%)' },
+      { color: '#ef4444', label: 'Dashboard: 43 (13.5%)' },
+      { color: '#8b5cf6', label: 'Settings: 32 (10.0%)' },
+      { color: '#f59e0b', label: 'API: 25 (7.8%)' },
+    ],
+    total: 319,
+    mostCommon: { value: 89, label: 'Authentication' },
+  },
+];
+
+// Line chart data matching the screenshot
+const timeToFindDefectsData = [
+  { value: 2, label: 'Day 1' },
+  { value: 3, label: 'Day 2' },
+  { value: 1, label: 'Day 3' },
+  { value: 4, label: 'Day 4' },
+  { value: 2, label: 'Day 5' },
+  { value: 3, label: 'Day 6' },
+  { value: 2, label: 'Day 7' },
+  { value: 1, label: 'Day 8' },
+  { value: 1, label: 'Day 10' },
+];
+
+const timeToFixDefectsData = [
+  { value: 1, label: 'Day 1' },
+  { value: 2, label: 'Day 2' },
+  { value: 3, label: 'Day 3' },
+  { value: 2, label: 'Day 4' },
+  { value: 4, label: 'Day 5' },
+  { value: 3, label: 'Day 6' },
+  { value: 2, label: 'Day 7' },
+  { value: 1, label: 'Day 8' },
+  { value: 2, label: 'Day 10' },
+];
+
+// Sample data for reopened defects - each category shows only its specific defects
+const REOPENED_DEFECTS_DATA = {
+  2: [
+    {
+      id: 'D-101',
+      assignedTo: 'Alice',
+      reporter: 'Bob',
+      releaseNumber: 'R1.2'
+    },
+    {
+      id: 'D-102',
+      assignedTo: 'Charlie',
+      reporter: 'Dave',
+      releaseNumber: 'R1.2'
+    },
+    {
+      id: 'D-103',
+      assignedTo: 'Eve',
+      reporter: 'Frank',
+      releaseNumber: 'R1.3'
+    },
+    {
+      id: 'D-104',
+      assignedTo: 'Grace',
+      reporter: 'Heidi',
+      releaseNumber: 'R1.3'
+    },
+    {
+      id: 'D-105',
+      assignedTo: 'Ivan',
+      reporter: 'Judy',
+      releaseNumber: 'R1.4'
+    }
+  ],
+  4: [
+    {
+      id: 'D-201',
+      assignedTo: 'Kevin',
+      reporter: 'Linda',
+      releaseNumber: 'R1.5'
+    }
+  ],
+  5: [
+    {
+      id: 'D-301',
+      assignedTo: 'Mike',
+      reporter: 'Nancy',
+      releaseNumber: 'R1.6'
+    }
+  ],
+  6: [
+    {
+      id: 'D-401',
+      assignedTo: 'Oscar',
+      reporter: 'Paula',
+      releaseNumber: 'R1.7'
+    }
+  ]
+};
+
+const { width } = Dimensions.get('window');
+const isSmallScreen = width < 500;
+
+// Custom LineChart Component
+const CustomLineChart = ({ data, color, width: chartWidth, height }: any) => {
+  const maxValue = Math.max(...data.map((item: any) => item.value));
+  const chartHeight = height - 40; // Leave space for labels
+  const chartWidthInner = chartWidth - 60; // Leave space for Y-axis labels
+
+  return (
+    <View style={{ width: chartWidth, height }}>
+      {/* Chart Area */}
+      <View style={{ flexDirection: 'row', height: chartHeight + 20 }}>
+        {/* Y-Axis */}
+        <View style={{ width: 30, height: chartHeight, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 5 }}>
+          {[5, 4, 3, 2, 1, 0].map(value => (
+            <Text key={value} style={{ fontSize: 10, color: '#6b7280' }}>{value}</Text>
+          ))}
+        </View>
+
+        {/* Chart Container */}
+        <View style={{ flex: 1, height: chartHeight, position: 'relative', backgroundColor: '#fafafa', borderWidth: 1, borderColor: '#e5e7eb' }}>
+          {/* Horizontal Grid Lines */}
+          {[0, 1, 2, 3, 4, 5].map(i => (
+            <View
+              key={i}
+              style={{
+                position: 'absolute',
+                top: (i / 5) * chartHeight,
+                left: 0,
+                right: 0,
+                height: 1,
+                backgroundColor: '#d1d5db',
+                borderStyle: 'dotted',
+              }}
+            />
+          ))}
+
+          {/* Vertical Grid Lines */}
+          {data.map((_: any, index: number) => (
+            <View
+              key={index}
+              style={{
+                position: 'absolute',
+                left: (index / (data.length - 1)) * chartWidthInner,
+                top: 0,
+                bottom: 0,
+                width: 1,
+                backgroundColor: '#d1d5db',
+                borderStyle: 'dotted',
+              }}
+            />
+          ))}
+
+          {/* Data Points and Lines */}
+          {data.map((point: any, index: number) => {
+            const x = (index / (data.length - 1)) * chartWidthInner;
+            const y = chartHeight - (point.value / 5) * chartHeight;
+
+            return (
+              <View key={index}>
+                {/* Data Point */}
+                <View
+                  style={{
+                    position: 'absolute',
+                    left: x - 4,
+                    top: y - 4,
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: color,
+                    borderWidth: 2,
+                    borderColor: '#fff',
+                  }}
+                />
+
+                {/* Line to next point */}
+                {index < data.length - 1 && (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      left: x,
+                      top: y,
+                      width: Math.sqrt(
+                        Math.pow((chartWidthInner / (data.length - 1)), 2) +
+                        Math.pow(((data[index + 1].value / 5) * chartHeight) - (point.value / 5) * chartHeight, 2)
+                      ),
+                      height: 2,
+                      backgroundColor: color,
+                      transformOrigin: '0 50%',
+                      transform: [
+                        {
+                          rotate: `${Math.atan2(
+                            ((data[index + 1].value / 5) * chartHeight) - (point.value / 5) * chartHeight,
+                            chartWidthInner / (data.length - 1)
+                          )}rad`
+                        }
+                      ],
+                    }}
+                  />
+                )}
+              </View>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* X-Axis Labels */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingLeft: 35, paddingRight: 5, marginTop: 5 }}>
+        {data.map((point: any, index: number) => (
+          <Text key={index} style={{ fontSize: 10, color: '#6b7280', textAlign: 'center' }}>
+            {point.label}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+};
+
+interface ProjectDetailsProps {
+  onBack?: () => void;
+  selectedProject?: string;
+  onLogout?: () => void;
+}
+
+const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject, onLogout }) => {
+  // Find the index of the selected project, default to 0 if not found
+  const initialSelectedIndex = selectedProject ? PROJECTS.findIndex(p => p.name === selectedProject) : 0;
+  const [selected, setSelected] = useState(initialSelectedIndex >= 0 ? initialSelectedIndex : 0);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<any>(null);
+  const [reopenedModalVisible, setReopenedModalVisible] = useState(false);
+  const [selectedReopenedData, setSelectedReopenedData] = useState<any>(null);
+  const currentProject = PROJECTS[selected];
+  const statusKey = currentProject.status as 'high' | 'medium' | 'low';
+  const statusObj = STATUS[statusKey];
+
+  const openModal = (card: any) => {
+    setSelectedCard(card);
+    setModalVisible(true);
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setSelectedCard(null);
+  };
+
+  const openReopenedModal = (timesReopened: number) => {
+    setSelectedReopenedData({
+      timesReopened,
+      defects: REOPENED_DEFECTS_DATA[timesReopened as keyof typeof REOPENED_DEFECTS_DATA] || []
+    });
+    setReopenedModalVisible(true);
+  };
+
+  const closeReopenedModal = () => {
+    setReopenedModalVisible(false);
+    setSelectedReopenedData(null);
+  };
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#f7f8fa' }}>
+      <Header onLogout={onLogout} />
+      <ImageBackground
+        source={require('../../assert/foto8.jpg')}
+        style={{ flex: 1, width: '100%', height: '100%' }}
+        resizeMode="cover"
+      >
+      <ScrollView contentContainerStyle={{ alignItems: 'center', paddingBottom: 32 }}>
+        {/* Back Button */}
+        {onBack && (
+          <TouchableOpacity style={styles.customBackButton} onPress={onBack}>
+            <Svg width={44} height={44} viewBox="0 0 48 48">
+              <Path
+                d="M36 24H12M12 24l8-8M12 24l8 8"
+                fill="none"
+                stroke="rgba(237, 222, 201, 0.95)"
+                strokeWidth={3.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <Path
+                d="M12 24c8 0 16 0 16 0"
+                fill="none"
+                stroke="rgba(237, 222, 201, 0.95)"
+                strokeWidth={3.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Svg>
+          </TouchableOpacity>
+        )}
+        {/* Project Selection */}
+        <View style={styles.selectionWrap}>
+          <Text style={[styles.selectionLabel, { color: '#03084a' }]}>Project Selection</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.selectionScroll}
+            contentContainerStyle={styles.selectionScrollContent}
+          >
+            {PROJECTS.map((p, i) => (
+              <TouchableOpacity
+                key={p.name + i}
+                style={[styles.projectBtn, selected === i && styles.projectBtnActive]}
+                onPress={() => setSelected(i)}
+              >
+                <Text style={[styles.projectBtnText, selected === i && styles.projectBtnTextActive]}>{p.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+        {/* Project Name and Status */}
+        <View style={[styles.projectHeader, { backgroundColor: 'rgba(237, 222, 201, 0.95)' }]}>
+          <Text style={[styles.projectName, { color: '#03084a' }]}>{currentProject.name}</Text>
+          <View style={styles.statusWrap}>
+           
+            <Text style={[styles.statusBadge, { backgroundColor: statusObj.bg, color: statusObj.color, borderColor: statusObj.color }]}>{statusObj.label}</Text>
+          </View>
+        </View>
+        {/* Defect Severity Breakdown */}
+        <Text style={[styles.sectionTitle, { color: '#fff' }]}>Defect Severity Breakdown</Text>
+        <View style={styles.severityCardGroup}>
+        {DEFECT_CARDS.map(card => (
+          <View
+            key={card.key}
+            style={[
+              styles.severityCard,
+              {
+                borderColor: card.color,
+                backgroundColor: '#fff',
+                marginVertical: 6,
+                marginHorizontal: 8,
+                minHeight: 50,
+                maxHeight: 220,
+                width: '98%',
+                alignSelf: 'center',
+                borderWidth: 3,
+              },
+            ]}
+          >
+            <View style={styles.severityCardHeader}>
+              <Text style={[styles.severityCardTitle, { color: card.color }]}>{card.title}</Text>
+              <Text style={styles.severityCardTotal}>Total: <Text style={{ fontWeight: 'bold' }}>{card.total}</Text></Text>
+            </View>
+            <View style={styles.severityCardDefectsRow}>
+              <View style={styles.severityCardDefectsCol}>
+                {card.items.filter(item => ['REOPEN', 'NEW', 'OPEN', 'FIXED'].includes(item.label)).map(item => (
+                  <View key={item.label} style={styles.severityCardDefectItem}>
+                    <View style={[styles.severityCardDot, { backgroundColor: item.color }]} />
+                    <Text style={styles.severityCardDefectLabel}>{item.label} <Text style={styles.severityCardDefectValue}>{item.value}</Text></Text>
+                  </View>
+                ))}
+              </View>
+              <View style={styles.severityCardDefectsCol}>
+                {card.items.filter(item => ['CLOSED', 'REJECTED', 'DUPLICATE'].includes(item.label)).map(item => (
+                  <View key={item.label} style={styles.severityCardDefectItem}>
+                    <View style={[styles.severityCardDot, { backgroundColor: item.color }]} />
+                    <Text style={styles.severityCardDefectLabel}>{item.label} <Text style={styles.severityCardDefectValue}>{item.value}</Text></Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+            <TouchableOpacity style={[styles.severityCardButton, { backgroundColor: '#03084a' }]} onPress={() => openModal(card)}>
+              <Text style={[styles.severityCardButtonText, { color: '#fff' }]}>View Chart</Text>
+            </TouchableOpacity>
+          </View>
+        ))}
+        </View>
+        {/* Defect Density Section */}
+        
+                  <View style={styles.severityCardGroup}>
+            <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
+            <View style={styles.severityCardHeader}>
+              <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Defect Density</Text>
+              
+            </View>
+            <View style={styles.metricGaugeWrap}>
+              <Text style={[styles.metricGaugeValue, { color: '#374151' }]}>Defect Density: <Text style={[styles.metricGaugeNum, { color: '#DC2626' }]}>11.38</Text></Text>
+              {/* Meter Chart */}
+              <View style={styles.meterContainer}>
+                <View style={styles.meterChartWrapper}>
+                  <Svg width={280} height={160} viewBox="0 0 280 160" style={styles.meterSvg}>
+                    {/* Green segment (0-7) - From left to top-left */}
+                    <Path
+                      d="M 50 140 A 90 90 0 0 1 113.64 63.64"
+                      fill="none"
+                      stroke="#4ADE80"
+                      strokeWidth={22}
+                      strokeLinecap="butt"
+                    />
+
+                    {/* Yellow/Orange segment (7-10) - From top-left to top-right */}
+                    <Path
+                      d="M 113.64 63.64 A 90 90 0 0 1 166.36 63.64"
+                      fill="none"
+                      stroke="#FBBF24"
+                      strokeWidth={22}
+                      strokeLinecap="butt"
+                    />
+
+                    {/* Red segment (10+) - From top-right to right */}
+                    <Path
+                      d="M 166.36 63.64 A 90 90 0 0 1 230 140"
+                      fill="none"
+                      stroke="#EF4444"
+                      strokeWidth={22}
+                      strokeLinecap="butt"
+                    />
+
+                    {/* Needle pointing to 11.38 position - exact match to screenshot */}
+                    <Path
+                      d="M 140 140 L 195 80"
+                      stroke="#374151"
+                      strokeWidth={3}
+                      strokeLinecap="round"
+                    />
+
+                    {/* Needle center circle - exact match to screenshot */}
+                    <Circle
+                      cx="140"
+                      cy="140"
+                      r="8"
+                      fill="#374151"
+                    />
+                  </Svg>
+
+                  {/* Scale labels positioned exactly like screenshot */}
+                  <Text style={[styles.meterLabel, styles.zeroLabel]}>0</Text>
+                  <Text style={[styles.meterLabel, styles.sevenLabel]}>7</Text>
+                  <Text style={[styles.meterLabel, styles.tenLabel]}>10</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Defect Severity Index Section */}
+        <View style={styles.severityCardGroup}>
+          <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
+            <View style={styles.severityCardHeader}>
+              <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Defect Severity Index</Text>
+              
+            </View>
+            <View style={[styles.metricScoreWrap, { alignItems: 'center', marginTop: 10 }]}>
+              <Text style={[styles.metricScoreNum, { color: '#fbbf24', fontSize: 32, marginBottom: 8 }]}>45</Text>
+              <Text style={[styles.metricScoreLabel, { textAlign: 'center', fontSize: 14, color: '#6b7280' }]}>Weighted severity score (higher = more severe defects)</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Defect to Remark Ratio Section */}
+        <View style={styles.severityCardGroup}>
+          <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
+            <View style={styles.severityCardHeader}>
+              <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Defect to Remark Ratio</Text>
+              
+            </View>
+            <View style={[styles.metricRatioWrap, { alignItems: 'center', marginTop: 10 }]}>
+              <Text style={[styles.metricRatioNum, { fontSize: 36, marginBottom: 8 }]}>97.82%</Text>
+              <Text style={[styles.metricRatioLabel, { textAlign: 'center', fontSize: 14, color: '#6b7280', marginBottom: 12 }]}>Defect to Remark Ratio (%)</Text>
+              <View style={[styles.metricRatioBadge, { backgroundColor: '#fbbf24', marginBottom: 15 }]}>
+                <Text style={styles.metricRatioBadgeText}>Medium</Text>
+              </View>
+              {/* Horizontal Meter */}
+              <View style={styles.ratioMeterContainer}>
+                <View style={styles.ratioMeterTrack}>
+                  <View style={[styles.ratioMeterFill, { width: '97.84%' }]} />
+                  <View style={styles.ratioMeterThumb} />
+                </View>
+                <View style={styles.ratioMeterLabels}>
+                  <Text style={styles.ratioMeterLabel}>0.0</Text>
+                  <Text style={styles.ratioMeterLabel}>0.5</Text>
+                  <Text style={styles.ratioMeterLabel}>1.0</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+       {/* Defects Reopened Multiple Times Section */}
+       <View style={styles.severityCardGroup}>
+         <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
+           <View style={styles.severityCardHeader}>
+             <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>{CHART_CARDS[0].title}</Text>
+           </View>
+           <View style={{ alignItems: 'center', marginTop: 10 }}>
+             {/* Pie Chart */}
+             <View style={styles.smallPieChartContainer}>
+               <View style={{ position: 'relative', width: 120, height: 120 }}>
+                 <Svg width={120} height={120} viewBox="0 0 120 120" style={{ position: 'absolute', top: 0, left: 0 }}>
+                   {(() => {
+                     const reopenedData = PIE_CARDS[0];
+                     const total = reopenedData.chartData.reduce((sum: number, value: number) => sum + value, 0);
+                     let currentAngle = 0;
+                     return reopenedData.chartData.map((value: number, index: number) => {
+                       if (value === 0) return null;
+                       const angle = (value / total) * 360;
+                       const startAngle = currentAngle;
+                       const endAngle = currentAngle + angle;
+                       currentAngle += angle;
+                       // Convert angles to radians
+                       const startRad = (Math.PI / 180) * startAngle;
+                       const endRad = (Math.PI / 180) * endAngle;
+                       const x1 = 60 + 60 * Math.cos(startRad);
+                       const y1 = 60 + 60 * Math.sin(startRad);
+                       const x2 = 60 + 60 * Math.cos(endRad);
+                       const y2 = 60 + 60 * Math.sin(endRad);
+                       const largeArc = angle > 180 ? 1 : 0;
+                       const pathData = `M60,60 L${x1},${y1} A60,60 0 ${largeArc} 1 ${x2},${y2} Z`;
+                       return (
+                         <Path
+                           key={index}
+                           d={pathData}
+                           fill={reopenedData.chartColors[index]}
+                           stroke="#fff"
+                           strokeWidth={1}
+                         />
+                       );
+                     });
+                   })()}
+                 </Svg>
+                 {/* Overlay touchable sectors */}
+                 {(() => {
+                   const reopenedData = PIE_CARDS[0];
+                   const total = reopenedData.chartData.reduce((sum: number, value: number) => sum + value, 0);
+                   let currentAngle = 0;
+                   return reopenedData.chartData.map((value: number, index: number) => {
+                     if (value === 0) return null;
+                     const angle = (value / total) * 360;
+                     const startAngle = currentAngle;
+                     const endAngle = currentAngle + angle;
+                     currentAngle += angle;
+
+                     // Calculate the center angle for the sector
+                     const midAngle = (startAngle + endAngle) / 2;
+                     const midRad = (Math.PI / 180) * midAngle;
+
+                     // Position the touchable area at the center of each sector
+                     const touchRadius = 35; // Distance from center
+                     const touchSize = 40; // Size of touch area
+                     const touchX = 60 + touchRadius * Math.cos(midRad) - touchSize/2;
+                     const touchY = 60 + touchRadius * Math.sin(midRad) - touchSize/2;
+
+                     // Get the times reopened based on index
+                     const timesReopened = index === 0 ? 2 : index === 1 ? 4 : index === 2 ? 5 : 6;
+                     return (
+                       <TouchableOpacity
+                         key={index}
+                         onPress={() => {
+                           console.log(`Clicked ${timesReopened} times segment`);
+                           openReopenedModal(timesReopened);
+                         }}
+                         activeOpacity={1}
+                         style={{
+                           position: 'absolute',
+                           left: touchX,
+                           top: touchY,
+                           width: touchSize,
+                           height: touchSize,
+                           borderRadius: touchSize/2,
+                           justifyContent: 'center',
+                           alignItems: 'center',
+                         }}
+                       />
+                     );
+                   });
+                 })()}
+               </View>
+             </View>
+
+             <View style={styles.pieLegend}>
+               {(CHART_CARDS[0].legend ?? []).map(item => (
+                 <View key={item.label} style={styles.pieLegendItem}>
+                   <View style={[styles.pieLegendDot, { backgroundColor: item.color }]} />
+                   <Text style={styles.pieLegendLabel}>{item.label}</Text>
+                 </View>
+               ))}
+             </View>
+           </View>
+         </View>
+       </View>
+
+       {/* Defect Distribution by Type Section */}
+       <View style={styles.severityCardGroup}>
+         <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
+           <View style={styles.severityCardHeader}>
+             <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>{CHART_CARDS[1].title}</Text>
+           </View>
+           <View style={{ alignItems: 'center', marginTop: 10 }}>
+             {/* Pie Chart */}
+             <View style={styles.smallPieChartContainer}>
+               <Svg width={120} height={120} viewBox="0 0 120 120">
+                 {(() => {
+                   const typeData = PIE_CARDS[1];
+                   const total = typeData.chartData.reduce((sum: number, value: number) => sum + value, 0);
+                   let currentAngle = 0;
+                   
+                   return typeData.chartData.map((value: number, index: number) => {
+                     if (value === 0) return null;
+                     const angle = (value / total) * 360;
+                     const startAngle = currentAngle;
+                     const endAngle = currentAngle + angle;
+                     currentAngle += angle;
+                     
+                     // Convert angles to radians
+                     const startRad = (Math.PI / 180) * startAngle;
+                     const endRad = (Math.PI / 180) * endAngle;
+                     const x1 = 60 + 60 * Math.cos(startRad);
+                     const y1 = 60 + 60 * Math.sin(startRad);
+                     const x2 = 60 + 60 * Math.cos(endRad);
+                     const y2 = 60 + 60 * Math.sin(endRad);
+                     const largeArc = angle > 180 ? 1 : 0;
+                     const pathData = `M60,60 L${x1},${y1} A60,60 0 ${largeArc} 1 ${x2},${y2} Z`;
+                     
+                     return (
+                       <Path
+                         key={index}
+                         d={pathData}
+                         fill={typeData.chartColors[index]}
+                         stroke="#fff"
+                         strokeWidth={1}
+                       />
+                     );
+                   });
+                 })()}
+               </Svg>
+             </View>
+
+             <View style={styles.pieLegend}>
+               {(CHART_CARDS[1].legend ?? []).map(item => (
+                 <View key={item.label} style={styles.pieLegendItem}>
+                   <View style={[styles.pieLegendDot, { backgroundColor: item.color }]} />
+                   <Text style={styles.pieLegendLabel}>{item.label}</Text>
+                 </View>
+               ))}
+             </View>
+             <View style={styles.pieCardFooter}>
+               <Text style={styles.pieCardFooterTotal}>{CHART_CARDS[1]?.total}</Text>
+               <Text style={styles.pieCardFooterLabel}>Total Defects</Text>
+               <Text style={styles.pieCardFooterMost}>{CHART_CARDS[1]?.mostCommon?.value}</Text>
+               <Text style={styles.pieCardFooterMostLabel}>Most Common
+                 <Text style={styles.pieCardFooterMostType}> {CHART_CARDS[1]?.mostCommon?.label}</Text>
+               </Text>
+             </View>
+           </View>
+         </View>
+       </View>
+
+       {/* Time to Find Defects Section */}
+       <View style={styles.severityCardGroup}>
+         <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
+           <View style={styles.severityCardHeader}>
+             <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Time to Find Defects</Text>
+           </View>
+           <View style={{ alignItems: 'center', marginTop: 10 }}>
+             <Svg width={320} height={213}>
+               {/* Axes */}
+               <Path d="M40,180 L300,180" stroke="#222" strokeWidth={2} />
+               <Path d="M40,180 L40,30" stroke="#222" strokeWidth={2} />
+               {/* Grid lines */}
+               {[1,2,3,4].map(i => (
+                 <Path key={i} d={`M40,${180-i*30} L300,${180-i*30}`} stroke="#e5e7eb" strokeWidth={1} />
+               ))}
+               {/* Data points and line */}
+               {(() => {
+                 const data = [2,3,1,4,2,3,2,1,2,1];
+                 const points = data.map((v,i) => {
+                   const x = 40 + (260/9)*i;
+                   const y = 180 - (v-1)*37.5;
+                   return { x, y };
+                 });
+                 const linePath = points.map((p,i) => i===0 ? `M${p.x},${p.y}` : `L${p.x},${p.y}`).join(' ');
+                 return (
+                   <>
+                     <Path d={linePath} stroke="#2563eb" strokeWidth={3} fill="none" />
+                     {points.map((p,i) => (
+                       <Circle key={i} cx={p.x} cy={p.y} r={6} fill="#2563eb" stroke="#fff" strokeWidth={2} />
+                     ))}
+                   </>
+                 );
+               })()}
+               {/* Y axis labels */}
+               {[1,2,3,4,5].map(i => (
+                 <SvgText key={i} x={10} y={180-(i-1)*30+6} fontSize={15} fill="#64748b">{i}</SvgText>
+               ))}
+               {/* X axis labels */}
+               {Array.from({length:10}).map((_,i) => (
+                 <SvgText key={i} x={40+(260/9)*i-12} y={195} fontSize={9} fill="#64748b">{`Day ${i+1}`}</SvgText>
+               ))}
+               {/* Axis titles */}
+               <SvgText x={-25} y={9} fontSize={10} fill="#64748b" rotation={-90} textAnchor="middle">Def Count</SvgText>
+               <SvgText x={152} y={210} fontSize={11} fill="#64748b" textAnchor="middle">Time (Day)</SvgText>
+             </Svg>
+           </View>
+         </View>
+       </View>
+
+       {/* Time to Fix Defects Section */}
+       <View style={styles.severityCardGroup}>
+         <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
+           <View style={styles.severityCardHeader}>
+             <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Time to Fix Defects</Text>
+           </View>
+           <View style={{ alignItems: 'center', marginTop: 10 }}>
+             <Svg width={320} height={215}>
+               {/* Axes */}
+               <Path d="M40,180 L300,180" stroke="#222" strokeWidth={2} />
+               <Path d="M40,180 L40,30" stroke="#222" strokeWidth={2} />
+               {/* Grid lines */}
+               {[1,2,3,4].map(i => (
+                 <Path key={i} d={`M40,${180-i*30} L300,${180-i*30}`} stroke="#e5e7eb" strokeWidth={1} />
+               ))}
+               {/* Data points and line */}
+               {(() => {
+                 const data = [3,2,4,3,2,3,2,2,1,2];
+                 const points = data.map((v,i) => {
+                   const x = 40 + (260/9)*i;
+                   const y = 180 - (v-1)*37.5;
+                   return { x, y };
+                 });
+                 const linePath = points.map((p,i) => i===0 ? `M${p.x},${p.y}` : `L${p.x},${p.y}`).join(' ');
+                 return (
+                   <>
+                     <Path d={linePath} stroke="#22c55e" strokeWidth={3} fill="none" />
+                     {points.map((p,i) => (
+                       <Circle key={i} cx={p.x} cy={p.y} r={6} fill="#22c55e" stroke="#fff" strokeWidth={2} />
+                     ))}
+                   </>
+                 );
+               })()}
+               {/* Y axis labels */}
+               {[1,2,3,4,5].map(i => (
+                 <SvgText key={i} x={10} y={180-(i-1)*30+6} fontSize={15} fill="#64748b">{i}</SvgText>
+               ))}
+               {/* X axis labels */}
+               {Array.from({length:10}).map((_,i) => (
+                 <SvgText key={i} x={40+(260/9)*i-12} y={195} fontSize={9} fill="#64748b">{`Day ${i+1}`}</SvgText>
+               ))}
+               {/* Axis titles */}
+               <SvgText x={-45} y={9} fontSize={10} fill="#64748b" rotation={-90}>Def Count</SvgText>
+               <SvgText x={122} y={210} fontSize={11} fill="#64748b">Time (Day)</SvgText>
+             </Svg>
+           </View>
+         </View>
+       </View>
+
+       {/* Defects by Module Section */}
+       <View style={styles.severityCardGroup}>
+         <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
+           <View style={styles.severityCardHeader}>
+             <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>{CHART_CARDS[4].title}</Text>
+           </View>
+           <View style={{ alignItems: 'center', marginTop: 10 }}>
+             {/* Pie Chart */}
+             <View style={styles.largePieChartContainer}>
+               <Svg width={180} height={180} viewBox="0 0 180 180">
+                 {(() => {
+                   const moduleData = PIE_CARDS[2];
+                   const total = moduleData.chartData.reduce((sum: number, value: number) => sum + value, 0);
+                   let currentAngle = 0;
+                   
+                   return moduleData.chartData.map((value: number, index: number) => {
+                     if (value === 0) return null;
+                     const angle = (value / total) * 360;
+                     const startAngle = currentAngle;
+                     const endAngle = currentAngle + angle;
+                     currentAngle += angle;
+                     
+                     // Convert angles to radians
+                     const startRad = (Math.PI / 180) * startAngle;
+                     const endRad = (Math.PI / 180) * endAngle;
+                     const x1 = 90 + 90 * Math.cos(startRad);
+                     const y1 = 90 + 90 * Math.sin(startRad);
+                     const x2 = 90 + 90 * Math.cos(endRad);
+                     const y2 = 90 + 90 * Math.sin(endRad);
+                     const largeArc = angle > 180 ? 1 : 0;
+                     const pathData = `M90,90 L${x1},${y1} A90,90 0 ${largeArc} 1 ${x2},${y2} Z`;
+                     
+                     return (
+                       <Path
+                         key={index}
+                         d={pathData}
+                         fill={moduleData.chartColors[index]}
+                         stroke="#fff"
+                         strokeWidth={1}
+                       />
+                     );
+                   });
+                 })()}
+               </Svg>
+             </View>
+
+             {/* Legend */}
+             <View style={styles.moduleLegend}>
+               {(CHART_CARDS[4].legend ?? []).map(item => (
+                 <View key={item.label} style={styles.moduleLegendItem}>
+                   <View style={[styles.moduleLegendDot, { backgroundColor: item.color }]} />
+                   <Text style={styles.moduleLegendLabel}>{item.label}</Text>
+                 </View>
+               ))}
+             </View>
+
+             {/* Footer */}
+             <View style={styles.pieCardFooter}>
+               <Text style={styles.pieCardFooterTotal}>{CHART_CARDS[4]?.total}</Text>
+               <Text style={styles.pieCardFooterLabel}>Total Defects</Text>
+               <Text style={styles.pieCardFooterMost}>{CHART_CARDS[4]?.mostCommon?.value}</Text>
+               <Text style={styles.pieCardFooterMostLabel}>Most Common
+                 <Text style={styles.pieCardFooterMostType}> {CHART_CARDS[4]?.mostCommon?.label}</Text>
+               </Text>
+             </View>
+           </View>
+         </View>
+       </View>
+      </ScrollView>
+      </ImageBackground>
+      {/* Modal for Reopened Defects */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={reopenedModalVisible}
+        onRequestClose={closeReopenedModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '80%', width: '95%' }]}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {selectedReopenedData?.timesReopened === 6 ? '>5' : selectedReopenedData?.timesReopened} times Defects
+              </Text>
+              <TouchableOpacity style={styles.closeButton} onPress={closeReopenedModal}>
+                <Text style={styles.closeButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Table */}
+            <ScrollView style={{ maxHeight: 400 }}>
+              <View style={styles.tableContainer}>
+                <View style={styles.tableHeader}>
+                  <Text style={[styles.tableHeaderCell, { flex: 1.2 }]} numberOfLines={1}>Defect ID</Text>
+                  <Text style={[styles.tableHeaderCell, { flex: 1.8 }]} numberOfLines={1}>Assigned</Text>
+                  <Text style={[styles.tableHeaderCell, { flex: 1.8 }]} numberOfLines={1}>Reporter</Text>
+                  <Text style={[styles.tableHeaderCell, { flex: 1.2 }]} numberOfLines={1}>Release</Text>
+                </View>
+
+                {selectedReopenedData?.defects.map((defect: any, index: number) => (
+                  <View key={defect.id} style={[styles.tableRow, index % 2 === 0 && styles.tableRowEven]}>
+                    <Text style={[styles.tableCell, { flex: 1.2, fontWeight: 'bold', color: '#3b82f6' }]} numberOfLines={1}>{defect.id}</Text>
+                    <Text style={[styles.tableCell, { flex: 1.8 }]} numberOfLines={1}>{defect.assignedTo}</Text>
+                    <Text style={[styles.tableCell, { flex: 1.8 }]} numberOfLines={1}>{defect.reporter}</Text>
+                    <Text style={[styles.tableCell, { flex: 1.2 }]} numberOfLines={1}>{defect.releaseNumber}</Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal for Pie Chart */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={closeModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Status Breakdown for {selectedCard?.title?.replace('Defects on ', '') || 'High'}
+              </Text>
+              <TouchableOpacity style={styles.closeButton} onPress={closeModal}>
+                <Text style={styles.closeButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
+            {/* Pie Chart */}
+            <View style={styles.pieChartContainer}>
+              <Svg width={200} height={200} viewBox="0 0 200 200">
+                {(() => {
+                  if (!selectedCard?.items) return null;
+                  const total = selectedCard.items.reduce((sum: any, item: any) => sum + item.value, 0);
+                  let currentAngle = 0;
+                  return selectedCard.items.map((item: any, idx: any) => {
+                    if (item.value === 0) return null;
+                    const angle = (item.value / total) * 360;
+                    const startAngle = currentAngle;
+                    const endAngle = currentAngle + angle;
+                    currentAngle += angle;
+                    // Convert angles to radians
+                    const startRad = (Math.PI / 180) * startAngle;
+                    const endRad = (Math.PI / 180) * endAngle;
+                    const x1 = 100 + 100 * Math.cos(startRad);
+                    const y1 = 100 + 100 * Math.sin(startRad);
+                    const x2 = 100 + 100 * Math.cos(endRad);
+                    const y2 = 100 + 100 * Math.sin(endRad);
+                    const largeArc = angle > 180 ? 1 : 0;
+                    const pathData = `M100,100 L${x1},${y1} A100,100 0 ${largeArc} 1 ${x2},${y2} Z`;
+                    return (
+                      <Path
+                        key={item.label}
+                        d={pathData}
+                        fill={item.color}
+                        stroke="#fff"
+                        strokeWidth={1}
+                      />
+                    );
+                  });
+                })()}
+              </Svg>
+              </View>
+            {/* Legend */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 16 }}>
+              {selectedCard?.items?.map((item: any) => (
+                <View key={item.label} style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 8, marginVertical: 4 }}>
+                  <View style={{ width: 18, height: 18, backgroundColor: item.color, marginRight: 6, borderRadius: 3 }} />
+                  <Text style={{ color: '#222', fontWeight: 'bold', fontSize: 15 }}>{item.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  backButton: {
+    alignSelf: 'flex-start',
+    marginTop: 18,
+    marginLeft: 18,
+    marginBottom: 8,
+    backgroundColor: '#eddec9',
+    paddingVertical: 6,  
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  backButtonText: {
+    color: '#1e293b',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  selectionWrap: {
+    width: '96%',
+    marginTop: 65, // Increased from 24 for lower positioning
+    marginBottom: 18,
+    backgroundColor: 'rgba(237, 222, 201, 0.95)',
+    borderRadius: 16,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  selectionLabel: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#181c32',
+  },
+  selectionScroll: {
+    flexDirection: 'row',
+    height: 48,
+  },
+  selectionScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  projectBtn: {
+    backgroundColor: '#f3f6fd',
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    marginHorizontal: 4,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  projectBtnActive: {
+    backgroundColor: '#03084a',
+  },
+  projectBtnText: {
+    color: '#181c32',
+    fontWeight: 'bold',
+    fontSize: 16,
+    textAlign: 'center',
+    flexWrap: 'wrap',
+  },
+  projectBtnTextActive: {
+    color: '#fff',
+  },
+  projectHeader: {
+    width: '94%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    marginBottom: 18,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  projectName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#181c32',
+  },
+  statusWrap: {
+    alignItems: 'flex-end',
+  },
+  statusLabel: {
+    fontSize: 15,
+    color: '#6b7280',
+    marginBottom: 2,
+  },
+  statusBadge: {
+    backgroundColor: '#fee2e2',
+    color: '#e53935',
+    fontWeight: 'bold',
+    fontSize: 14,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    overflow: 'hidden',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#181c32',
+    marginBottom: 14,
+    marginTop: 8,
+    width: '94%',
+  },
+  defectCardsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    width: '98%',
+    marginBottom: 18,
+    gap: 18,
+  },
+  defectCardsRowMobile: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 12,
+  },
+  defectCard: {
+    flex: 1,
+    minWidth: 220,
+    maxWidth: 340,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 2,
+    marginHorizontal: 8,
+    padding: 18,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  defectCardMobile: {
+    minWidth: '90%',
+    maxWidth: '98%',
+    marginHorizontal: 0,
+    padding: 12,
+  },
+  defectCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  defectCardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  defectCardTotal: {
+    fontSize: 16,
+    color: '#374151',
+    fontWeight: 'bold',
+  },
+  defectCardList: {
+    marginBottom: 10,
+  },
+  defectCardItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  defectCardDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8,
+  },
+  defectCardItemLabel: {
+    fontSize: 15,
+    color: '#181c32',
+    flex: 1,
+  },
+  defectCardItemValue: {
+    fontSize: 15,
+    color: '#181c32',
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  defectCardBtn: {
+    backgroundColor: '#f3f6fd',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 18,
+    alignSelf: 'flex-start',
+    marginTop: 6,
+  },
+  defectCardBtnText: {
+    color: '#2563eb',
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    width: '98%',
+    gap: 18,
+    marginBottom: 18,
+  },
+  metricsRowMobile: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 12,
+  },
+  metricCard: {
+    flex: 1,
+    minWidth: 220,
+    maxWidth: 340,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 2,
+    marginHorizontal: 8,
+    padding: 18,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  metricCardMobile: {
+    minWidth: '90%',
+    maxWidth: '98%',
+    marginHorizontal: 0,
+    padding: 12,
+  },
+  metricCardTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#181c32',
+    marginBottom: 10,
+  },
+  metricGaugeWrap: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  metricGaugeValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#e53935',
+    marginBottom: 4,
+  },
+  metricGaugeNum: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#e53935',
+  },
+  metricGaugeGraphic: {
+    width: 100,
+    height: 50,
+    backgroundColor: '#f3f6fd',
+    borderRadius: 25,
+    marginTop: 6,
+  },
+  gaugeContainer: {
+    width: 140,
+    height: 80,
+    marginTop: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  gaugeBackground: {
+    width: 120,
+    height: 60,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  gaugeArc: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 12,
+    borderBottomColor: 'transparent',
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+  gaugeArcGreen: {
+    borderTopColor: '#22c55e',
+    transform: [{ rotate: '-90deg' }],
+    left: 0,
+    top: 0,
+  },
+  gaugeArcYellow: {
+    borderTopColor: '#fbbf24',
+    transform: [{ rotate: '-30deg' }],
+    left: 0,
+    top: 0,
+  },
+  gaugeArcRed: {
+    borderTopColor: '#e53935',
+    transform: [{ rotate: '30deg' }],
+    left: 0,
+    top: 0,
+  },
+  gaugeLabels: {
+    position: 'absolute',
+    bottom: 5,
+    width: 120,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  gaugeLabelLeft: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  gaugeLabelCenter: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '600',
+    position: 'absolute',
+    top: -25,
+    left: '50%',
+    marginLeft: -6,
+  },
+  gaugeLabelRight: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  gaugeNeedle: {
+    position: 'absolute',
+    bottom: 20,
+    width: 2,
+    height: 45,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  needleLine: {
+    width: 2,
+    height: 35,
+    backgroundColor: '#374151',
+    borderRadius: 1,
+  },
+  needleCenter: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#374151',
+    position: 'absolute',
+    bottom: 0,
+  },
+  metricScoreWrap: {
+    alignItems: 'center',
+  },
+  metricScoreNum: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#fbbf24',
+    marginBottom: 4,
+  },
+  metricScoreLabel: {
+    fontSize: 15,
+    color: '#181c32',
+    textAlign: 'center',
+  },
+  metricRatioWrap: {
+    alignItems: 'center',
+  },
+  metricRatioNum: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#181c32',
+    marginBottom: 4,
+  },
+  metricRatioLabel: {
+    fontSize: 15,
+    color: '#181c32',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  metricRatioBadge: {
+    backgroundColor: '#fbbf24',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    alignSelf: 'center',
+  },
+  metricRatioBadgeText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  pieCardsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    width: '98%',
+    marginTop: 18,
+    marginBottom: 18,
+    gap: 18,
+  },
+  pieCard: {
+    flex: 1,
+    minWidth: 320,
+    maxWidth: 480,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginHorizontal: 8,
+    padding: 18,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10,
+    shadowRadius: 10,
+    elevation: 4,
+    alignItems: 'center',
+  },
+  pieCardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#181c32',
+    textAlign: 'center',
+  },
+  pieChartPlaceholder: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: '#f3f6fd',
+    marginBottom: 12,
+  },
+  pieLegend: {
+    marginTop: 8,
+    width: '100%',
+    alignItems: 'flex-start',
+  },
+  pieLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  pieLegendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  pieLegendLabel: {
+    fontSize: 15,
+    color: '#181c32',
+  },
+  pieCardFooter: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  pieCardFooterTotal: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#181c32',
+    marginBottom: 2,
+  },
+  pieCardFooterLabel: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
+  pieCardFooterMost: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2563eb',
+    marginBottom: 2,
+  },
+  pieCardFooterMostLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  pieCardFooterMostType: {
+    fontWeight: 'bold',
+    color: '#181c32',
+  },
+  chartsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    width: '98%',
+    marginTop: 8,
+    marginBottom: 8,
+    gap: 18,
+  },
+  chartsRowMobile: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 12,
+  },
+  pieCardMobile: {
+    minWidth: '90%',
+    maxWidth: '98%',
+    marginHorizontal: 0,
+    padding: 12,
+  },
+  lineChartPlaceholder: {
+    width: 180,
+    height: 120,
+    borderRadius: 12,
+    backgroundColor: '#f3f6fd',
+    marginBottom: 12,
+  },
+  severityCard: {
+    borderWidth: 2,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    padding: 12,
+    marginBottom: 16,
+    marginHorizontal: 2,
+    width: '97%',
+    alignSelf: 'center',
+  },
+  severityCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  severityCardTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'left',
+  },
+  severityCardTotal: {
+    fontSize: 13,
+    color: '#181c32',
+    textAlign: 'right',
+  },
+  severityCardDefectsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'stretch',
+    marginBottom: 6,
+    width: '100%',
+    maxHeight: 120,
+    overflow: 'hidden',
+  },
+  severityCardDefectsCol: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
+  severityCardDefectItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 1,
+    paddingVertical: 1,
+  },
+  severityCardDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    marginRight: 6,
+  },
+  severityCardDefectLabel: {
+    fontSize: 12,
+    color: '#181c32',
+    textAlign: 'left',
+  },
+  severityCardDefectValue: {
+    fontWeight: 'bold',
+    color: '#181c32',
+  },
+  severityCardButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#e6f0ff',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 14,
+    marginTop: 6,
+  },
+  severityCardButtonText: {
+    color: '#2563eb',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#181c32',
+    flex: 1,
+  },
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#6b7280',
+  },
+  pieChartContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  pieChart: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: '#f3f4f6',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  pieSlice: {
+    position: 'absolute',
+    width: 200,
+    height: 100,
+    backgroundColor: '#2563eb',
+    transformOrigin: '50% 100%',
+    top: 0,
+    left: 0,
+  },
+  modalLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  modalLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    minWidth: '45%',
+  },
+  modalLegendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  modalLegendText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  smallPieChartContainer: {
+    alignItems: 'center',
+    marginVertical: 15,
+  },
+  smallPieChart: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#f3f4f6',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  smallPieSlice: {
+    position: 'absolute',
+    width: 120,
+    height: 60,
+    backgroundColor: '#2563eb',
+    transformOrigin: '50% 100%',
+    top: 0,
+    left: 0,
+  },
+  largePieChartContainer: {
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  largePieChart: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: '#f3f4f6',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  largePieSlice: {
+    position: 'absolute',
+    width: 180,
+    height: 90,
+    backgroundColor: '#2563eb',
+    transformOrigin: '50% 100%',
+    top: 0,
+    left: 0,
+  },
+  moduleLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 15,
+    paddingHorizontal: 10,
+  },
+  moduleLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    width: '48%',
+  },
+  moduleLegendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  moduleLegendLabel: {
+    fontSize: 12,
+    color: '#374151',
+    fontWeight: '500',
+    flex: 1,
+  },
+  lineChartContainer: {
+    padding: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fafafa',
+    borderRadius: 8,
+    margin: 10,
+  },
+  customBackButton: {
+    position: 'absolute',
+    top: 5,
+    left: 10,
+    zIndex: 20,
+    backgroundColor: 'transparent',
+    padding: 4,
+  },
+  defectDensityCard: {
+    backgroundColor: 'rgba(237, 222, 201, 0.95)',
+    borderWidth: 0,
+    shadowColor: '#000',
+  },
+  meterContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 15,
+    width: '100%',
+  },
+  meterChartWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 280,
+    height: 160,
+  },
+  meterSvg: {
+    alignSelf: 'center',
+  },
+  meterLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: 140,
+    marginTop: -10,
+  },
+  meterLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  meterLabelCenter: {
+    position: 'absolute',
+    left: '50%',
+    marginLeft: -8,
+  },
+  meterLabelRight: {
+    position: 'absolute',
+    right: 0,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#6b7280',
+  },
+  severityCardGroup: {
+    width: '90%',
+    marginBottom: 18,
+    backgroundColor: 'rgba(237, 222, 201, 0.95)',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+    alignSelf: 'center',
+  },
+
+  zeroLabel: {
+    position: 'absolute',
+    left: 20,
+    bottom: 20,
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  sevenLabel: {
+    position: 'absolute',
+    left: 105,
+    top: 25,
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  tenLabel: {
+    position: 'absolute',
+    right: 105,
+    top: 25,
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  leftLabel: {
+    position: 'absolute',
+    left: 10,
+    bottom: 10,
+    fontSize: 16,
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  topLeftLabel: {
+    position: 'absolute',
+    left: 105,
+    top: 15,
+    fontSize: 16,
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  topRightLabel: {
+    position: 'absolute',
+    right: 25,
+    top: 35,
+    fontSize: 16,
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  centerLabel: {
+    position: 'absolute',
+    left: 110,
+    bottom: 30,
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  rightLabel: {
+    position: 'absolute',
+    right: 20,
+    bottom: 0,
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+
+  ratioMeterContainer: {
+    width: '100%',
+    marginTop: 10,
+  },
+  ratioMeterTrack: {
+    height: 8,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 4,
+    position: 'relative',
+    marginBottom: 8,
+  },
+  ratioMeterFill: {
+    height: '100%',
+    backgroundColor: '#fbbf24',
+    borderRadius: 4,
+  },
+  ratioMeterThumb: {
+    width: 16,
+    height: 16,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#fbbf24',
+    position: 'absolute',
+    top: -4,
+    left: '97.84%',
+    marginLeft: -8,
+  },
+  ratioMeterLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 5,
+  },
+  ratioMeterLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  tableContainer: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#f9fafb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  tableHeaderCell: {
+    padding: 1,
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#374151',
+    textAlign: 'center',
+    flexWrap: 'nowrap',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  tableRowEven: {
+    backgroundColor: '#f9fafb',
+  },
+  tableCell: {
+    padding: 12,
+    fontSize: 13,
+    color: '#374151',
+    textAlign: 'center',
+    flexWrap: 'nowrap',
+  },
+});
+
+export default ProjectDetails;
