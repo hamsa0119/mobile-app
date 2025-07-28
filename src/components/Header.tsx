@@ -13,11 +13,18 @@ import Svg, { Path } from 'react-native-svg';
 interface HeaderProps {
   userName?: string;
   onLogout?: () => void;
+  onNotificationPress?: () => void;
+  hasNotifications?: boolean;
 }
 
 const defaultAvatar = require('../../assert/photo.jpeg');
 
-const Header: React.FC<HeaderProps> = ({ userName = 'Zayal', onLogout }) => {
+const Header: React.FC<HeaderProps> = ({ 
+  userName = 'Zayal', 
+  onLogout, 
+  onNotificationPress,
+  hasNotifications = true 
+}) => {
   const handleLogout = () => {
     Alert.alert(
       'Logout',
@@ -29,6 +36,14 @@ const Header: React.FC<HeaderProps> = ({ userName = 'Zayal', onLogout }) => {
     );
   };
 
+  const handleNotificationPress = () => {
+    if (onNotificationPress) {
+      onNotificationPress();
+    } else {
+      Alert.alert('Notifications', 'You have new notifications!');
+    }
+  };
+
   return (
     <View style={styles.headerContainer}>
       <View style={styles.row}>
@@ -37,6 +52,25 @@ const Header: React.FC<HeaderProps> = ({ userName = 'Zayal', onLogout }) => {
           <Text style={styles.greeting}>Hello Zayal</Text>
           <Text style={styles.subtitle}>Track Your Next Defect</Text>
         </View>
+        <TouchableOpacity style={styles.notificationButton} onPress={handleNotificationPress}>
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Path
+              d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"
+              stroke="#03084a"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <Path
+              d="M13.73 21a2 2 0 0 1-3.46 0"
+              stroke="#03084a"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </Svg>
+          {hasNotifications && <View style={styles.notificationBadge} />}
+        </TouchableOpacity>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
             <Path
@@ -69,7 +103,11 @@ const Header: React.FC<HeaderProps> = ({ userName = 'Zayal', onLogout }) => {
 
 const styles = StyleSheet.create({
   headerContainer: {
-    backgroundColor: 'hsla(147, 33%, 95%, 0.78)',
+    backgroundColor:    'rgba(255, 255, 255, 1)' 
+
+
+
+    ,
     paddingTop: 18,
     paddingBottom: 12,
     paddingHorizontal: 16,
@@ -108,12 +146,34 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Avenir Next' : 'sans-serif',
     textAlign: 'left',
   },
+  notificationButton: {
+    borderWidth: 1,
+    borderColor: '#03084a',
+    borderRadius: 20,
+    padding: 10,
+    marginRight: 1,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ff4444',
+    borderWidth: 1,
+    borderColor: 'white',
+  },
   logoutButton: {
     borderWidth: 1,
     borderColor: '#03084a',
     borderRadius: 20,
     padding: 10,
-    marginLeft: 10,
+    marginLeft: 6,
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',

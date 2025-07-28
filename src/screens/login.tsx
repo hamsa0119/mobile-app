@@ -19,9 +19,10 @@ const bugImage = require('../../assert/bug.png');
 interface LoginScreenProps {
   onLoginSuccess?: () => void;
   onBack?: () => void;
+  onForgotPassword?: () => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onBack }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onBack, onForgotPassword }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -38,6 +39,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onBack }) => 
       onBack();
     } else {
       Alert.alert('Back button pressed');
+    }
+  };
+
+  const handleForgotPassword = () => {
+    if (onForgotPassword) {
+      onForgotPassword();
+    } else {
+      Alert.alert('Forgot Password', 'Navigate to forgot password screen');
     }
   };
 
@@ -149,7 +158,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onBack }) => 
             </View>
             <Text style={styles.checkboxLabel}>Remember Me</Text>
           </TouchableOpacity>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={handleForgotPassword}>
             <Text style={styles.forgot}>Forgot Password?</Text>
           </TouchableOpacity>
         </View>
@@ -322,9 +331,10 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   forgot: {
-    color: '#2563eb',
+    color: '#003060',
     fontSize: 15,
     textDecorationLine: 'underline',
+    fontWeight: 'bold',
   },
   button: {
     flexDirection: 'row',
