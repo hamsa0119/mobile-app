@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,15 @@ import {
   Dimensions,
   SafeAreaView,
   PanResponder,
-  ImageBackground, // Add this import
+  ImageBackground,
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import Header from '../components/Header';
+import { getAllProjects, Project } from '../api/projectget';
+import { getProjectCardColors, ProjectCardColor, getDefaultProjectCardColor } from '../api/projectcardcolor';
 
 const STATUS = [
   {
@@ -188,10 +193,115 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout }) => {
+  // API State
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectColors, setProjectColors] = useState<ProjectCardColor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // UI State
   const [filter, setFilter] = useState('all');
   const [showChart, setShowChart] = useState(false);
-  const filteredProjects =
-    filter === 'all' ? PROJECTS : PROJECTS.filter(p => p.risk === filter);
+
+  // Fetch projects on component mount
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await getAllProjects();
+      
+      if (result && result.length > 0) {
+        console.log('Projects fetched successfully:', result);
+        setProjects(result);
+        
+        // Fetch project card colors for all projects
+        await fetchProjectColors(result);
+      } else {
+        console.warn('No projects returned from API');
+        setProjects([]);
+        setProjectColors([]);
+      }
+    } catch (err) {
+      console.error('Error fetching projects:', err);
+      setError('Failed to load projects');
+      Alert.alert('Error', 'Failed to load projects. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchProjectColors = async (projectList: Project[]) => {
+    try {
+      if (projectList.length === 0) {
+        setProjectColors([]);
+        return;
+      }
+
+      const projectIds = projectList.map(p => p.id).filter(id => id !== undefined);
+      
+      if (projectIds.length === 0) {
+        console.warn('No valid project IDs found for color fetching');
+        setProjectColors([]);
+        return;
+      }
+
+      console.log(`Fetching project card colors for ${projectIds.length} projects...`);
+      const colors = await getProjectCardColors(projectIds);
+      
+      if (colors && colors.length > 0) {
+        console.log('Project card colors fetched successfully:', colors);
+        setProjectColors(colors);
+      } else {
+        console.warn('No project card colors returned from API');
+        setProjectColors([]);
+      }
+    } catch (err) {
+      console.error('Error fetching project card colors:', err);
+      // Don't show error alert for colors, just log it
+      setProjectColors([]);
+    }
+  };
+
+  // Map API projects to dashboard format with risk levels
+  const mapProjectsToDashboard = (apiProjects: Project[]) => {
+    return apiProjects.map(project => {
+      // Map backend status to risk level
+      let risk = 'low';
+      if (project.status?.toLowerCase().includes('high') || project.status?.toLowerCase().includes('critical')) {
+        risk = 'high';
+      } else if (project.status?.toLowerCase().includes('medium') || project.status?.toLowerCase().includes('moderate')) {
+        risk = 'medium';
+      }
+      
+      return {
+        name: project.name,
+        risk: risk as 'high' | 'medium' | 'low',
+        id: project.id,
+        status: project.status,
+        projectName: project.projectName,
+        projectStatus: project.projectStatus,
+      };
+    });
+  };
+
+  // Define the dashboard project type
+  type DashboardProject = {
+    name: string;
+    risk: 'high' | 'medium' | 'low';
+    id?: number;
+    status?: string;
+    projectName?: string;
+    projectStatus?: string;
+  };
+
+  // Use API data with fallback to static data
+  const dashboardProjects: DashboardProject[] = projects.length > 0 ? mapProjectsToDashboard(projects) : PROJECTS.map(p => ({ name: p.name, risk: p.risk as 'high' | 'medium' | 'low' }));
+  const filteredProjects = filter === 'all' ? dashboardProjects : dashboardProjects.filter(p => p.risk === filter);
+  
   // Sort: high (red) first, then medium (yellow), then low (green)
   const riskOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
   const sortedProjects = [...filteredProjects].sort((a, b) => (riskOrder[a.risk] ?? 3) - (riskOrder[b.risk] ?? 3));
@@ -204,7 +314,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout
         style={{ flex: 1, width: '100%', height: '100%' }}
         resizeMode="cover"
       >
-        <ScrollView style={styles.bg} contentContainerStyle={{ alignItems: 'center', paddingBottom: 32 }}>
+        <ScrollView 
+          style={styles.bg} 
+          contentContainerStyle={{ alignItems: 'center', paddingBottom: 32 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={fetchProjects}
+              colors={['#03084a']}
+              tintColor="#03084a"
+            />
+          }
+        >
           {/* Back Button */}
           {onBack && (
             <TouchableOpacity style={styles.customBackButton} onPress={onBack}>
@@ -384,59 +505,130 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout
           {/* All Projects */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: 'rgba(237, 222, 201, 0.95)' }]}>All Projects</Text>
-            <View style={[styles.filterRow, isSmallScreen && styles.filterRowMobile]}>
-              <View style={[styles.filterBar, isSmallScreen && styles.filterBarMobile]}>
-                {FILTERS.map(f => {
-                  let activeBg = '#2563eb';
-                  let activeText = '#fff';
-                  if (f.key === 'all') {
-                    activeBg = '#03084a';
-                    activeText = '#fff';
-                  } else if (f.key === 'high') {
-                    activeBg = '#ad0c0c';
-                    activeText = '#fff';
-                  } else if (f.key === 'medium') {
-                    activeBg = '#e3b707';
-                    activeText = '#fff';
-                  } else if (f.key === 'low') {
-                    activeBg = '#0b9c40';
-                    activeText = '#fff';
+            
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#03084a" />
+                <Text style={styles.loadingText}>Loading projects...</Text>
+              </View>
+            ) : error ? (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity style={styles.retryButton} onPress={fetchProjects}>
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <View style={[styles.filterRow, isSmallScreen && styles.filterRowMobile]}>
+                  <View style={[styles.filterBar, isSmallScreen && styles.filterBarMobile]}>
+                    {FILTERS.map(f => {
+                      let activeBg = '#2563eb';
+                      let activeText = '#fff';
+                      if (f.key === 'all') {
+                        activeBg = '#03084a';
+                        activeText = '#fff';
+                      } else if (f.key === 'high') {
+                        activeBg = '#ad0c0c';
+                        activeText = '#fff';
+                      } else if (f.key === 'medium') {
+                        activeBg = '#e3b707';
+                        activeText = '#fff';
+                      } else if (f.key === 'low') {
+                        activeBg = '#0b9c40';
+                        activeText = '#fff';
+                      }
+                      return (
+                        <TouchableOpacity
+                          key={f.key}
+                          style={[
+                            styles.filterBtn,
+                            filter === f.key && { backgroundColor: activeBg, shadowColor: activeBg, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 6, elevation: 2 },
+                            isSmallScreen && styles.filterBtnMobile
+                          ]}
+                          onPress={() => setFilter(f.key)}
+                        >
+                          <Text style={[
+                            styles.filterBtnText,
+                            filter === f.key && { color: activeText },
+                            isSmallScreen && styles.filterBtnTextMobile
+                          ]}>{f.label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+                
+                {sortedProjects.length > 0 ? (
+                  <View style={styles.projectGridFixed}>
+                                    {sortedProjects.map((p, i) => {
+                  const s = STATUS.find(s => s.key === p.risk) || STATUS[2];
+                  
+                  // Find custom color for this project
+                  const customColor = projectColors.find(color => color.projectId === p.id);
+                  
+                  // Convert gradient to solid color for project cards
+                  let cardColor = s.color; // Default to risk-based color
+                  if (customColor && customColor.projectCardColor) {
+                    // Extract color from gradient string like "bg-gradient-to-r from-yellow-400 to-yellow-500"
+                    const gradientMatch = customColor.projectCardColor.match(/from-(\w+)-(\d+)/);
+                    if (gradientMatch) {
+                      const colorName = gradientMatch[1];
+                      const intensity = gradientMatch[2];
+                      
+                      // Map Tailwind color names to hex values
+                      const colorMap: { [key: string]: { [key: string]: string } } = {
+                        yellow: {
+                          '400': '#fbbf24',
+                          '500': '#f59e0b',
+                          '600': '#d97706',
+                        },
+                        red: {
+                          '400': '#f87171',
+                          '500': '#ef4444',
+                          '600': '#dc2626',
+                        },
+                        green: {
+                          '400': '#4ade80',
+                          '500': '#22c55e',
+                          '600': '#16a34a',
+                        },
+                        blue: {
+                          '400': '#60a5fa',
+                          '500': '#3b82f6',
+                          '600': '#2563eb',
+                        },
+                        gray: {
+                          '400': '#9ca3af',
+                          '500': '#6b7280',
+                          '600': '#4b5563',
+                        },
+                      };
+                      
+                      cardColor = colorMap[colorName]?.[intensity] || s.color;
+                    }
                   }
+                  
                   return (
-                    <TouchableOpacity
-                      key={f.key}
-                      style={[
-                        styles.filterBtn,
-                        filter === f.key && { backgroundColor: activeBg, shadowColor: activeBg, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 6, elevation: 2 },
-                        isSmallScreen && styles.filterBtnMobile
-                      ]}
-                      onPress={() => setFilter(f.key)}
-                    >
-                      <Text style={[
-                        styles.filterBtnText,
-                        filter === f.key && { color: activeText },
-                        isSmallScreen && styles.filterBtnTextMobile
-                      ]}>{f.label}</Text>
-                    </TouchableOpacity>
+                    <ProjectCard
+                      key={p.id || p.name + i}
+                      color={cardColor}
+                      icon={"✔️"}
+                      name={p.name}
+                      tag={s.tag}
+                      onPress={() => onProjectSelect && onProjectSelect(p.name)}
+                    />
                   );
                 })}
-              </View>
-            </View>
-            <View style={styles.projectGridFixed}>
-              {sortedProjects.map((p, i) => {
-                const s = STATUS.find(s => s.key === p.risk) || STATUS[2];
-                return (
-                  <ProjectCard
-                    key={p.name + i}
-                    color={s.color}
-                    icon={"✔️"}
-                    name={p.name}
-                    tag={s.tag}
-                    onPress={() => onProjectSelect && onProjectSelect(p.name)}
-                  />
-                );
-              })}
-            </View>
+                  </View>
+                ) : (
+                  <View style={styles.noProjectsContainer}>
+                    <Text style={styles.noProjectsText}>No projects available</Text>
+                    <Text style={styles.noProjectsSubtext}>Try refreshing or check your connection</Text>
+                  </View>
+                )}
+              </>
+            )}
           </View>
         </ScrollView>
       </ImageBackground>
@@ -980,6 +1172,58 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#333',
+  },
+  // Loading and Error States
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 15,
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#ef4444',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  retryButton: {
+    backgroundColor: '#03084a',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  noProjectsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  noProjectsText: {
+    fontSize: 18,
+    color: '#6b7280',
+    textAlign: 'center',
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  noProjectsSubtext: {
+    fontSize: 14,
+    color: '#9ca3af',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 
