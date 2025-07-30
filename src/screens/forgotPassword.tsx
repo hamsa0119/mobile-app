@@ -16,23 +16,16 @@ const backgroundImage = require('../../assert/2.jpeg');
 const bugImage = require('../../assert/bug.png');
 
 interface ForgotPasswordScreenProps {
-  onBack?: () => void;
   onResetSuccess?: () => void;
 }
 
-const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, onResetSuccess }) => {
+const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onResetSuccess }) => {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const goBack = () => {
-    if (onBack) {
-      onBack();
-    } else {
-      Alert.alert('Back button pressed');
-    }
-  };
+
 
   const handleResetPassword = () => {
     if (!email) {
@@ -75,10 +68,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, onR
     <ImageBackground source={backgroundImage} style={styles.bg} resizeMode="cover">
       <View style={styles.overlay} />
       
-      {/* Back button */}
-      <TouchableOpacity style={styles.backButton} onPress={goBack} activeOpacity={0.7}>
-        <Text style={styles.backButtonText}>← Back</Text>
-      </TouchableOpacity>
+
 
       <View style={styles.card}>
         <View style={styles.iconCircle}>
@@ -136,9 +126,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({ onBack, onR
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.backToLogin} onPress={goBack}>
-          <Text style={styles.backToLoginText}>Back to Login</Text>
-        </TouchableOpacity>
+
       </View>
     </ImageBackground>
   );
@@ -155,26 +143,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(20,24,40,0.55)',
     zIndex: 1,
   },
-  backButton: {
-    position: 'absolute',
-    top: 50,
-    left: 280,
-    zIndex: 10,
-    backgroundColor: 'rgba(237,222,201,0.95)',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  backButtonText: {
-    color: '#1e293b',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+
   card: {
     width: '92%',
     maxWidth: 400,
@@ -276,15 +245,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  backToLogin: {
-    paddingVertical: 8,
-  },
-  backToLoginText: {
-    color: '#003060',
-    fontSize: 16,
-    textDecorationLine: 'underline',
-    fontWeight: 'bold',
-  },
+
   error: {
     color: '#dc2626',
     marginBottom: 10,

@@ -1,5 +1,15 @@
 import axios from 'axios';
-import { VITE_BASE_URL } from '@env';
+
+// Environment variable with fallback
+let VITE_BASE_URL: string;
+try {
+  const envModule = require('@env');
+  VITE_BASE_URL = envModule.VITE_BASE_URL || 'http://34.56.162.48:8087/api/v1/';
+} catch (error) {
+  // Fallback if @env module is not available
+  VITE_BASE_URL = 'http://34.56.162.48:8087/api/v1/';
+  console.warn('Environment variables not loaded, using fallback URL:', VITE_BASE_URL);
+}
 
 // Define the DefectSeverityIndex interface
 export interface DefectSeverityIndex {

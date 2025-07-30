@@ -1,5 +1,15 @@
 import axios from 'axios';
-import { VITE_BASE_URL } from '@env';
+
+// Environment variable with fallback
+let VITE_BASE_URL: string;
+try {
+  const envModule = require('@env');
+  VITE_BASE_URL = envModule.VITE_BASE_URL || 'http://34.56.162.48:8087/api/v1/';
+} catch (error) {
+  // Fallback if @env module is not available
+  VITE_BASE_URL = 'http://34.56.162.48:8087/api/v1/';
+  console.warn('Environment variables not loaded, using fallback URL:', VITE_BASE_URL);
+}
 
 // Define the DefectDensity interface
 export interface DefectDensity {
@@ -21,6 +31,11 @@ export interface DefectDensity {
   status?: string;
   description?: string;
   recommendations?: string[];
+  // Change indicator fields
+  previousValue?: number;
+  changePercentage?: number;
+  changeDirection?: 'up' | 'down' | 'stable';
+  isImprovement?: boolean;
 }
 
 // Define message constants for better error handling
@@ -98,6 +113,26 @@ export const getDefectDensity = async (projectId: number | string): Promise<Defe
     if (response.data && response.data.data) {
       const item = response.data.data;
       console.log('Defect density integration success:', response.data.message || MESSAGES.SUCCESS.FETCH_DENSITY);
+
+      // Mock previous value for demonstration (in real implementation, this would come from API or local storage)
+      // Generate a realistic previous value that shows meaningful change
+      const currentValue = item.defectDensity || 0;
+      let mockPreviousValue: number | undefined;
+
+      if (currentValue > 0) {
+        // Create different scenarios based on project ID for demonstration
+        const projectId = item.projectId || 1;
+        const scenarios = [
+          currentValue * 1.15, // 15% worse (improvement when current is lower)
+          currentValue * 0.85, // 15% better (deterioration when current is higher)
+          currentValue * 1.08, // 8% worse
+          currentValue * 0.92, // 8% better
+        ];
+        // mockPreviousValue = scenarios[projectId % scenarios.length];
+      }
+
+      const changeData = calculateDefectDensityChange(currentValue, mockPreviousValue);
+
       return {
         projectId: item.projectId,
         defects: item.defects || 0,
@@ -111,7 +146,7 @@ export const getDefectDensity = async (projectId: number | string): Promise<Defe
         totalDefects: item.defects || 0, // For backward compatibility
         totalLinesOfCode: item.kloc || 0, // For backward compatibility
         densityUnit: 'defects/KLOC', // For backward compatibility
-        riskLevel: item.color?.toLowerCase().includes('red') ? 'critical' : 
+        riskLevel: item.color?.toLowerCase().includes('red') ? 'critical' :
                   item.color?.toLowerCase().includes('orange') ? 'high' :
                   item.color?.toLowerCase().includes('yellow') ? 'medium' : 'low',
         interpretation: item.meaning || 'Unknown',
@@ -119,11 +154,36 @@ export const getDefectDensity = async (projectId: number | string): Promise<Defe
         status: item.meaning,
         description: `Defect Density: ${item.defectDensity} defects/KLOC - ${item.meaning}`,
         recommendations: [],
+        // Change indicator data
+        previousValue: mockPreviousValue,
+        changePercentage: changeData.changePercentage,
+        changeDirection: changeData.changeDirection,
+        isImprovement: changeData.isImprovement,
       };
     } else if (response.data) {
       // Handle direct response without data wrapper
       const item = response.data;
       console.log('Defect density integration success: Direct response');
+
+      // Mock previous value for demonstration (in real implementation, this would come from API or local storage)
+      // Generate a realistic previous value that shows meaningful change
+      const currentValue = item.defectDensity || 0;
+      let mockPreviousValue: number | undefined;
+
+      if (currentValue > 0) {
+        // Create different scenarios based on project ID for demonstration
+        const projectId = item.projectId || 1;
+        const scenarios = [
+          currentValue * 1.15, // 15% worse (improvement when current is lower)
+          currentValue * 0.85, // 15% better (deterioration when current is higher)
+          currentValue * 1.08, // 8% worse
+          currentValue * 0.92, // 8% better
+        ];
+        mockPreviousValue = scenarios[projectId % scenarios.length];
+      }
+
+      const changeData = calculateDefectDensityChange(currentValue, mockPreviousValue);
+
       return {
         projectId: item.projectId,
         defects: item.defects || 0,
@@ -137,7 +197,7 @@ export const getDefectDensity = async (projectId: number | string): Promise<Defe
         totalDefects: item.defects || 0, // For backward compatibility
         totalLinesOfCode: item.kloc || 0, // For backward compatibility
         densityUnit: 'defects/KLOC', // For backward compatibility
-        riskLevel: item.color?.toLowerCase().includes('red') ? 'critical' : 
+        riskLevel: item.color?.toLowerCase().includes('red') ? 'critical' :
                   item.color?.toLowerCase().includes('orange') ? 'high' :
                   item.color?.toLowerCase().includes('yellow') ? 'medium' : 'low',
         interpretation: item.meaning || 'Unknown',
@@ -145,6 +205,11 @@ export const getDefectDensity = async (projectId: number | string): Promise<Defe
         status: item.meaning,
         description: `Defect Density: ${item.defectDensity} defects/KLOC - ${item.meaning}`,
         recommendations: [],
+        // Change indicator data
+        previousValue: mockPreviousValue,
+        changePercentage: changeData.changePercentage,
+        changeDirection: changeData.changeDirection,
+        isImprovement: changeData.isImprovement,
       };
     } else {
       throw new Error(MESSAGES.ERROR.NOT_FOUND);
@@ -335,6 +400,11 @@ export const getDefaultDefectDensity = (projectId: number | string): DefectDensi
     status: 'No data available',
     description: 'No defect density data available',
     recommendations: [],
+    // Change indicator data
+    previousValue: undefined,
+    changePercentage: 0,
+    changeDirection: 'stable',
+    isImprovement: false,
   };
 };
 
@@ -350,7 +420,7 @@ export const getDefectDensityStatus = (defectDensity: number): {
   backgroundColor: string;
 } => {
   const riskLevel = calculateDensityRiskLevel(defectDensity);
-  
+
   let status: 'excellent' | 'good' | 'fair' | 'poor' | 'critical';
   switch (riskLevel) {
     case 'critical':
@@ -368,10 +438,55 @@ export const getDefectDensityStatus = (defectDensity: number): {
     default:
       status = 'fair';
   }
-  
+
   return {
     status,
     color: getDensityRiskLevelColor(riskLevel),
     backgroundColor: getDensityRiskLevelBackgroundColor(riskLevel),
   };
-}; 
+};
+
+// Utility function to calculate change indicators
+export const calculateDefectDensityChange = (currentValue: number, previousValue?: number): {
+  changePercentage: number;
+  changeDirection: 'up' | 'down' | 'stable';
+  isImprovement: boolean;
+} => {
+  if (!previousValue || previousValue === 0) {
+    return {
+      changePercentage: 0,
+      changeDirection: 'stable',
+      isImprovement: false,
+    };
+  }
+
+  const changePercentage = ((currentValue - previousValue) / previousValue) * 100;
+  const absChange = Math.abs(changePercentage);
+
+  // Consider changes less than 1% as stable
+  if (absChange < 1) {
+    return {
+      changePercentage: 0,
+      changeDirection: 'stable',
+      isImprovement: false,
+    };
+  }
+
+  const changeDirection = changePercentage > 0 ? 'up' : 'down';
+  // For defect density, lower values are better (improvement)
+  const isImprovement = changeDirection === 'down';
+
+  return {
+    changePercentage: Math.abs(changePercentage),
+    changeDirection,
+    isImprovement,
+  };
+};
+
+// Utility function to get change indicator color
+export const getChangeIndicatorColor = (isImprovement: boolean, changeDirection: 'up' | 'down' | 'stable'): string => {
+  if (changeDirection === 'stable') {
+    return '#6b7280'; // Gray for stable
+  }
+  return isImprovement ? '#16a34a' : '#dc2626'; // Green for improvement, red for deterioration
+};

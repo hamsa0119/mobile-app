@@ -15,14 +15,13 @@ import Svg, { Path } from 'react-native-svg';
 const backgroundImage = require('../../assert/2.jpeg');
 const bugImage = require('../../assert/bug.png');
 
-// Add prop type for onLoginSuccess and onBack
+// Add prop type for onLoginSuccess and onForgotPassword
 interface LoginScreenProps {
   onLoginSuccess?: () => void;
-  onBack?: () => void;
   onForgotPassword?: () => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onBack, onForgotPassword }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onForgotPassword }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -33,14 +32,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onBack, onFor
     setShowPassword(!showPassword);
   };
 
-  const goBack = () => {
-    // Use onBack for back navigation
-    if (onBack) {
-      onBack();
-    } else {
-      Alert.alert('Back button pressed');
-    }
-  };
+
 
   const handleForgotPassword = () => {
     if (onForgotPassword) {
@@ -69,10 +61,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onBack, onFor
   return (
     <ImageBackground source={backgroundImage} style={styles.bg} resizeMode="cover">
       <View style={styles.overlay} />
-      {/* Back button */}
-      <TouchableOpacity style={styles.backButton} onPress={goBack} activeOpacity={0.7}>
-        <Text style={styles.backButtonText}>← Back</Text>
-      </TouchableOpacity>
+
       <View style={styles.card}>
         <View style={styles.iconCircle}>
           <Image source={bugImage} style={styles.bugImage} resizeMode="contain" />
@@ -181,26 +170,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(20,24,40,0.55)', // dark overlay for readability
     zIndex: 1,
   },
-  backButton: {
-    position: 'absolute',
-    top: 50,
-    left: 280,
-    zIndex: 10,
-    backgroundColor: 'rgba(237,222,201,0.95)',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  backButtonText: {
-    color: '#1e293b',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+
   card: {
     width: '92%',
     maxWidth: 400,

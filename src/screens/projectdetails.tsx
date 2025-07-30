@@ -16,9 +16,14 @@ import {
 import Svg, { Path, Circle, Text as SvgText } from 'react-native-svg';
 import Header from '../components/Header';
 import { getAllProjects, Project } from '../api/projectget';
+import { getProjectCardColors, ProjectCardColor, getDefaultProjectCardColor } from '../api/projectcardcolor';
 import { getDefectRemarkRatio, DefectRemarkRatio, getDefaultDefectRemarkRatio, formatPercentage, getRatioStatus, getRatioStatusColor } from '../api/defectremarkratio';
 import { getDefectSeverityIndex, DefectSeverityIndex, getDefaultDefectSeverityIndex, formatSeverityIndex, getSeverityIndexStatus } from '../api/defectseverityindex';
-import { getDefectDensity, DefectDensity, getDefaultDefectDensity, formatDefectDensity, getDefectDensityStatus } from '../api/defectdensity';
+import { getDefectDensity, DefectDensity, getDefaultDefectDensity, formatDefectDensity, getDefectDensityStatus, getChangeIndicatorColor } from '../api/defectdensity';
+import { getDefectTypeDistribution, DefectTypeDistribution, getDefaultDefectTypeDistribution } from '../api/defecttype';
+import { getDefectByModule, DefectByModule, getDefaultDefectByModule, getModuleStatus, getModuleStatusColor } from '../api/defectbymodule';
+import { getDefectSeverityBreakdown, DefectSeverityBreakdown, getDefaultDefectSeverityBreakdown, getSeverityColor, getSeverityStatus } from '../api/defectseveritybreakdown';
+
 
 const PROJECTS = [
   { name: 'Defect Tracker', status: 'high' },
@@ -419,17 +424,21 @@ const CustomLineChart = ({ data, color, width: chartWidth, height }: any) => {
 };
 
 interface ProjectDetailsProps {
-  onBack?: () => void;
   selectedProject?: string;
+  selectedProjectRisk?: 'high' | 'medium' | 'low';
   onLogout?: () => void;
 }
 
-const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject, onLogout }) => {
+const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, selectedProjectRisk, onLogout }) => {
   // API State
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectColors, setProjectColors] = useState<ProjectCardColor[]>([]);
   const [defectRemarkRatio, setDefectRemarkRatio] = useState<DefectRemarkRatio | null>(null);
   const [defectSeverityIndex, setDefectSeverityIndex] = useState<DefectSeverityIndex | null>(null);
   const [defectDensity, setDefectDensity] = useState<DefectDensity | null>(null);
+  const [defectTypeDistribution, setDefectTypeDistribution] = useState<DefectTypeDistribution | null>(null);
+  const [defectByModule, setDefectByModule] = useState<DefectByModule[]>([]);
+  const [defectSeverityBreakdown, setDefectSeverityBreakdown] = useState<DefectSeverityBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -439,18 +448,50 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [reopenedModalVisible, setReopenedModalVisible] = useState(false);
   const [selectedReopenedData, setSelectedReopenedData] = useState<any>(null);
+  const [hasLocalSelection, setHasLocalSelection] = useState(false);
+  const [selectionCounter, setSelectionCounter] = useState(0);
+
+  // Fetch defect by module for the selected project
+  const fetchDefectByModule = async () => {
+    try {
+      // Make sure we have projects loaded
+      if (projects.length === 0) {
+        console.log('No projects available yet, skipping defect by module fetch');
+        setDefectByModule([]);
+        return;
+      }
+
+      const currentProject = projects[selected];
+      if (currentProject && currentProject.id) {
+        console.log(`Fetching defect by module for project: ${currentProject.name} (ID: ${currentProject.id})`);
+        const moduleResult = await getDefectByModule(currentProject.id);
+        console.log('Defect by module fetched successfully:', moduleResult);
+        setDefectByModule(moduleResult);
+      } else {
+        console.warn('No project ID available for defect by module');
+        setDefectByModule([]);
+      }
+    } catch (moduleError) {
+      console.warn('Error fetching defect by module:', moduleError);
+      // Don't show error for defect by module as it's optional
+      setDefectByModule([]);
+    }
+  };
 
   // Fetch projects on component mount
   useEffect(() => {
     fetchProjects();
   }, []);
 
-  // Fetch defect to remark ratio, severity index, and defect density when selected project changes
+  // Fetch defect to remark ratio, severity index, defect density, defect type distribution, defect by module, and defect severity breakdown when selected project changes
   useEffect(() => {
     if (projects.length > 0 && selected < projects.length) {
       fetchDefectRemarkRatio();
       fetchDefectSeverityIndex();
       fetchDefectDensity();
+      fetchDefectTypeDistribution();
+      fetchDefectByModule();
+      fetchDefectSeverityBreakdown();
     }
   }, [selected, projects]);
 
@@ -464,6 +505,9 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
         console.log('Projects fetched successfully:', result);
         setProjects(result);
         
+        // Fetch project card colors for all projects
+        await fetchProjectColors(result);
+        
         // Set initial selected project if provided
         if (selectedProject) {
           const projectIndex = result.findIndex(p => p.name === selectedProject);
@@ -474,6 +518,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
       } else {
         console.warn('No projects returned from API');
         setProjects([]);
+        setProjectColors([]);
         setDefectRemarkRatio(null);
       }
     } catch (err) {
@@ -482,6 +527,38 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
       Alert.alert('Error', 'Failed to load projects. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchProjectColors = async (projectList: Project[]) => {
+    try {
+      if (projectList.length === 0) {
+        setProjectColors([]);
+        return;
+      }
+
+      const projectIds = projectList.map(p => p.id).filter(id => id !== undefined);
+      
+      if (projectIds.length === 0) {
+        console.warn('No valid project IDs found for color fetching');
+        setProjectColors([]);
+        return;
+      }
+
+      console.log(`Fetching project card colors for ${projectIds.length} projects...`);
+      const colors = await getProjectCardColors(projectIds);
+      
+      if (colors && colors.length > 0) {
+        console.log('Project card colors fetched successfully:', colors);
+        setProjectColors(colors);
+      } else {
+        console.warn('No project card colors returned from API');
+        setProjectColors([]);
+      }
+    } catch (err) {
+      console.error('Error fetching project card colors:', err);
+      // Don't show error alert for colors, just log it
+      setProjectColors([]);
     }
   };
 
@@ -566,27 +643,123 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
     }
   };
 
+  // Fetch defect type distribution for the selected project
+  const fetchDefectTypeDistribution = async () => {
+    try {
+      // Make sure we have projects loaded
+      if (projects.length === 0) {
+        console.log('No projects available yet, skipping defect type distribution fetch');
+        setDefectTypeDistribution(null);
+        return;
+      }
+
+      const currentProject = projects[selected];
+      if (currentProject && currentProject.id) {
+        console.log(`Fetching defect type distribution for project: ${currentProject.name} (ID: ${currentProject.id})`);
+        const typeDistributionResult = await getDefectTypeDistribution(currentProject.id);
+        console.log('Defect type distribution fetched successfully:', typeDistributionResult);
+        setDefectTypeDistribution(typeDistributionResult);
+      } else {
+        console.warn('No project ID available for defect type distribution');
+        setDefectTypeDistribution(null);
+      }
+    } catch (typeDistributionError) {
+      console.warn('Error fetching defect type distribution:', typeDistributionError);
+      // Don't show error for defect type distribution as it's optional
+      setDefectTypeDistribution(null);
+    }
+  };
+
+  // Fetch defect severity breakdown for the selected project
+  const fetchDefectSeverityBreakdown = async () => {
+    try {
+      // Make sure we have projects loaded
+      if (projects.length === 0) {
+        console.log('No projects available yet, skipping defect severity breakdown fetch');
+        setDefectSeverityBreakdown([]);
+        return;
+      }
+
+      const currentProject = projects[selected];
+      if (currentProject && currentProject.id) {
+        console.log(`Fetching defect severity breakdown for project: ${currentProject.name} (ID: ${currentProject.id})`);
+        const severityBreakdownResult = await getDefectSeverityBreakdown(currentProject.id);
+        console.log('Defect severity breakdown fetched successfully:', severityBreakdownResult);
+        setDefectSeverityBreakdown(severityBreakdownResult);
+      } else {
+        console.warn('No project ID available for defect severity breakdown');
+        setDefectSeverityBreakdown([]);
+      }
+    } catch (severityBreakdownError) {
+      console.warn('Error fetching defect severity breakdown:', severityBreakdownError);
+      // Don't show error for defect severity breakdown as it's optional
+      setDefectSeverityBreakdown([]);
+    }
+  };
+
   // Get current project data with fallback
   const currentProject = projects[selected] || PROJECTS[0] || { name: 'Unknown Project', status: 'low' };
   
-  // Validate status and provide fallback
+  // Map API status values to risk levels
+  // Function to get risk level based on card color from API (same as dashboard)
+  const getRiskLevelFromCardColor = (projectId: number | undefined): 'high' | 'medium' | 'low' => {
+    const customColor = projectColors.find(color => color.projectId === projectId);
+    
+    if (customColor && customColor.projectCardColor) {
+      const gradientMatch = customColor.projectCardColor.match(/from-(\w+)-(\d+)/);
+      if (gradientMatch) {
+        const colorName = gradientMatch[1];
+        console.log(`Project ${projectId}: Card color is ${colorName}, risk level will be ${colorName === 'yellow' ? 'medium' : colorName === 'red' ? 'high' : 'low'}`);
+        
+        // Determine risk level based on color
+        if (colorName === 'yellow') {
+          return 'medium';
+        } else if (colorName === 'red') {
+          return 'high';
+        } else if (colorName === 'green') {
+          return 'low';
+        }
+      }
+    }
+    
+    // Fallback to status-based risk
+    console.log(`Project ${projectId}: No card color found, using fallback risk level: low`);
+    return 'low';
+  };
+
   const getStatusKey = (status: string | undefined): 'high' | 'medium' | 'low' => {
     if (status === 'high' || status === 'medium' || status === 'low') {
       return status;
     }
-    // Map backend status values to frontend status
+    
+    // Map API status values to risk levels
+    if (status === 'ACTIVE') {
+      return 'high';
+    } else if (status === 'COMPLETED') {
+      return 'medium';
+    } else if (status === 'INACTIVE') {
+      return 'low';
+    }
+    
+    // Fallback mapping for other status values
     if (status?.toLowerCase().includes('high') || status?.toLowerCase().includes('critical')) {
       return 'high';
     }
     if (status?.toLowerCase().includes('medium') || status?.toLowerCase().includes('moderate')) {
       return 'medium';
     }
+    
     // Default to low for any other status
     return 'low';
   };
   
-  const statusKey = getStatusKey(currentProject?.status);
+  // Use card color-based risk level (same as dashboard) for consistent status display
+  const cardColorRiskLevel = getRiskLevelFromCardColor(currentProject?.id);
+  const statusKey = hasLocalSelection ? cardColorRiskLevel : (selectedProjectRisk || cardColorRiskLevel);
   const statusObj = STATUS[statusKey];
+  
+  // Force re-calculation when selection counter changes
+  const forceUpdate = selectionCounter;
 
   const openModal = (card: any) => {
     setSelectedCard(card);
@@ -596,6 +769,33 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
   const closeModal = () => {
     setModalVisible(false);
     setSelectedCard(null);
+  };
+
+  // Change Indicator Component
+  const ChangeIndicator = ({ defectDensity }: { defectDensity: DefectDensity | null }) => {
+    if (!defectDensity || !defectDensity.changeDirection || defectDensity.changeDirection === 'stable') {
+      return null;
+    }
+
+    const color = getChangeIndicatorColor(defectDensity.isImprovement || false, defectDensity.changeDirection);
+    const isUp = defectDensity.changeDirection === 'up';
+
+    return (
+      <View style={styles.changeIndicatorContainer}>
+        <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+          <Path
+            d={isUp ? "M7 14l5-5 5 5" : "M7 10l5 5 5-5"}
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+        <Text style={[styles.changeIndicatorText, { color }]}>
+          {defectDensity.changePercentage?.toFixed(1)}%
+        </Text>
+      </View>
+    );
   };
 
   const openReopenedModal = (timesReopened: number) => {
@@ -614,6 +814,8 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
   // Handle project selection change
   const handleProjectSelection = async (index: number) => {
     setSelected(index);
+    setHasLocalSelection(true);
+    setSelectionCounter(prev => prev + 1);
     // Fetch defect to remark ratio and severity index for the newly selected project
     try {
       // Make sure we have projects loaded
@@ -628,11 +830,12 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
       if (selectedProject && selectedProject.id) {
         console.log(`Fetching data for new project: ${selectedProject.name} (ID: ${selectedProject.id})`);
         
-        // Fetch ratio, severity index, and defect density in parallel
-        const [ratioResult, severityResult, densityResult] = await Promise.allSettled([
+        // Fetch ratio, severity index, defect density, and defect type distribution in parallel
+        const [ratioResult, severityResult, densityResult, typeDistributionResult] = await Promise.allSettled([
           getDefectRemarkRatio(selectedProject.id),
           getDefectSeverityIndex(selectedProject.id),
-          getDefectDensity(selectedProject.id)
+          getDefectDensity(selectedProject.id),
+          getDefectTypeDistribution(selectedProject.id)
         ]);
 
         if (ratioResult.status === 'fulfilled') {
@@ -658,6 +861,14 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
           console.warn('Error fetching defect density for new project:', densityResult.reason);
           setDefectDensity(null);
         }
+
+        if (typeDistributionResult.status === 'fulfilled') {
+          console.log('Defect type distribution updated for new project:', typeDistributionResult.value);
+          setDefectTypeDistribution(typeDistributionResult.value);
+        } else {
+          console.warn('Error fetching defect type distribution for new project:', typeDistributionResult.reason);
+          setDefectTypeDistribution(null);
+        }
       } else {
         console.warn('No project ID available for API calls');
         setDefectRemarkRatio(null);
@@ -667,6 +878,8 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
       console.warn('Error fetching data for new project:', error);
       setDefectRemarkRatio(null);
       setDefectSeverityIndex(null);
+      setDefectDensity(null);
+      setDefectTypeDistribution(null);
     }
   };
 
@@ -689,29 +902,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
           />
         }
       >
-        {/* Back Button */}
-        {onBack && (
-          <TouchableOpacity style={styles.customBackButton} onPress={onBack}>
-            <Svg width={44} height={44} viewBox="0 0 48 48">
-              <Path
-                d="M36 24H12M12 24l8-8M12 24l8 8"
-                fill="none"
-                stroke="rgba(237, 222, 201, 0.95)"
-                strokeWidth={3.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <Path
-                d="M12 24c8 0 16 0 16 0"
-                fill="none"
-                stroke="rgba(237, 222, 201, 0.95)"
-                strokeWidth={3.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
-          </TouchableOpacity>
-        )}
+
         {/* Project Selection */}
         <View style={styles.selectionWrap}>
           <Text style={[styles.selectionLabel, { color: '#03084a' }]}>Project Selection</Text>
@@ -728,28 +919,28 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
               </TouchableOpacity>
             </View>
           ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.selectionScroll}
-              contentContainerStyle={styles.selectionScrollContent}
-            >
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.selectionScroll}
+            contentContainerStyle={styles.selectionScrollContent}
+          >
               {projects.length > 0 ? (
                 projects.map((project, i) => (
-                  <TouchableOpacity
+              <TouchableOpacity
                     key={project.id || i}
-                    style={[styles.projectBtn, selected === i && styles.projectBtnActive]}
+                style={[styles.projectBtn, selected === i && styles.projectBtnActive]}
                     onPress={() => handleProjectSelection(i)}
-                  >
+              >
                     <Text style={[styles.projectBtnText, selected === i && styles.projectBtnTextActive]}>
                       {project.name}
                     </Text>
-                  </TouchableOpacity>
+              </TouchableOpacity>
                 ))
               ) : (
                 <Text style={styles.noProjectsText}>No projects available</Text>
               )}
-            </ScrollView>
+          </ScrollView>
           )}
         </View>
         {/* Project Name and Status */}
@@ -757,109 +948,153 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
           <Text style={[styles.projectName, { color: '#03084a' }]}>{currentProject.name}</Text>
           <View style={styles.statusWrap}>
            
-            <Text style={[styles.statusBadge, { backgroundColor: statusObj.bg, color: statusObj.color, borderColor: statusObj.color }]}>{statusObj.label}</Text>
+            <Text key={`status-${forceUpdate}`} style={[styles.statusBadge, { backgroundColor: statusObj.bg, color: statusObj.color, borderColor: statusObj.color }]}>{statusObj.label}</Text>
           </View>
         </View>
         {/* Defect Severity Breakdown */}
         <Text style={[styles.sectionTitle, { color: '#fff' }]}>Defect Severity Breakdown</Text>
         <View style={styles.severityCardGroup}>
-        {DEFECT_CARDS.map(card => (
-          <View
-            key={card.key}
-            style={[
-              styles.severityCard,
-              {
-                borderColor: card.color,
-                backgroundColor: '#fff',
-                marginVertical: 6,
-                marginHorizontal: 8,
-                minHeight: 50,
-                maxHeight: 220,
-                width: '98%',
-                alignSelf: 'center',
-                borderWidth: 3,
-              },
-            ]}
-          >
-            <View style={styles.severityCardHeader}>
-              <Text style={[styles.severityCardTitle, { color: card.color }]}>{card.title}</Text>
-              <Text style={styles.severityCardTotal}>Total: <Text style={{ fontWeight: 'bold' }}>{card.total}</Text></Text>
-            </View>
-            <View style={styles.severityCardDefectsRow}>
-              <View style={styles.severityCardDefectsCol}>
-                {card.items.filter(item => ['REOPEN', 'NEW', 'OPEN', 'FIXED'].includes(item.label)).map(item => (
-                  <View key={item.label} style={styles.severityCardDefectItem}>
-                    <View style={[styles.severityCardDot, { backgroundColor: item.color }]} />
-                    <Text style={styles.severityCardDefectLabel}>{item.label} <Text style={styles.severityCardDefectValue}>{item.value}</Text></Text>
-                  </View>
-                ))}
+        {defectSeverityBreakdown && defectSeverityBreakdown.length > 0 ? (
+          defectSeverityBreakdown.map(severity => (
+            <View
+              key={severity.severityId}
+              style={[
+                styles.severityCard,
+                {
+                  borderColor: getSeverityColor(severity.severityName),
+                  backgroundColor: '#fff',
+                  marginVertical: 6,
+                  marginHorizontal: 8,
+                  minHeight: 50,
+                  maxHeight: 220,
+                  width: '98%',
+                  alignSelf: 'center',
+                  borderWidth: 3,
+                },
+              ]}
+            >
+              <View style={styles.severityCardHeader}>
+                <Text style={[styles.severityCardTitle, { color: getSeverityColor(severity.severityName) }]}>
+                  Defects on {severity.severityName}
+                </Text>
+                <Text style={styles.severityCardTotal}>Total: <Text style={{ fontWeight: 'bold' }}>{severity.totalDefects}</Text></Text>
               </View>
-              <View style={styles.severityCardDefectsCol}>
-                {card.items.filter(item => ['CLOSED', 'REJECTED', 'DUPLICATE'].includes(item.label)).map(item => (
-                  <View key={item.label} style={styles.severityCardDefectItem}>
-                    <View style={[styles.severityCardDot, { backgroundColor: item.color }]} />
-                    <Text style={styles.severityCardDefectLabel}>{item.label} <Text style={styles.severityCardDefectValue}>{item.value}</Text></Text>
+              <View style={styles.severityCardDefectsRow}>
+                <View style={styles.severityCardDefectsCol}>
+                  <View style={styles.severityCardDefectItem}>
+                    <View style={[styles.severityCardDot, { backgroundColor: '#e53935' }]} />
+                    <Text style={styles.severityCardDefectLabel}>REOPEN <Text style={styles.severityCardDefectValue}>{severity.reopenedDefects}</Text></Text>
                   </View>
-                ))}
+                  <View style={styles.severityCardDefectItem}>
+                    <View style={[styles.severityCardDot, { backgroundColor: '#2563eb' }]} />
+                    <Text style={styles.severityCardDefectLabel}>NEW <Text style={styles.severityCardDefectValue}>{severity.newDefects}</Text></Text>
+                  </View>
+                  <View style={styles.severityCardDefectItem}>
+                    <View style={[styles.severityCardDot, { backgroundColor: '#eab308' }]} />
+                    <Text style={styles.severityCardDefectLabel}>OPEN <Text style={styles.severityCardDefectValue}>{severity.openDefects}</Text></Text>
+                  </View>
+                  <View style={styles.severityCardDefectItem}>
+                    <View style={[styles.severityCardDot, { backgroundColor: '#22c55e' }]} />
+                    <Text style={styles.severityCardDefectLabel}>FIXED <Text style={styles.severityCardDefectValue}>{severity.fixedDefects}</Text></Text>
+                  </View>
+                </View>
+                <View style={styles.severityCardDefectsCol}>
+                  <View style={styles.severityCardDefectItem}>
+                    <View style={[styles.severityCardDot, { backgroundColor: '#166534' }]} />
+                    <Text style={styles.severityCardDefectLabel}>CLOSED <Text style={styles.severityCardDefectValue}>{severity.closedDefects}</Text></Text>
+                  </View>
+                  <View style={styles.severityCardDefectItem}>
+                    <View style={[styles.severityCardDot, { backgroundColor: '#b91c1c' }]} />
+                    <Text style={styles.severityCardDefectLabel}>REJECTED <Text style={styles.severityCardDefectValue}>{severity.rejectedDefects}</Text></Text>
+                  </View>
+                  <View style={styles.severityCardDefectItem}>
+                    <View style={[styles.severityCardDot, { backgroundColor: '#6b7280' }]} />
+                    <Text style={styles.severityCardDefectLabel}>DUPLICATE <Text style={styles.severityCardDefectValue}>{severity.duplicateDefects}</Text></Text>
+                  </View>
+                </View>
               </View>
+              <TouchableOpacity style={[styles.severityCardButton, { backgroundColor: '#03084a' }]} onPress={() => openModal({
+                key: severity.severityName.toLowerCase(),
+                title: `Defects on ${severity.severityName}`,
+                total: severity.totalDefects,
+                color: getSeverityColor(severity.severityName),
+                border: getSeverityColor(severity.severityName),
+                items: [
+                  { label: 'REOPEN', color: '#e53935', value: severity.reopenedDefects },
+                  { label: 'NEW', color: '#2563eb', value: severity.newDefects },
+                  { label: 'OPEN', color: '#eab308', value: severity.openDefects },
+                  { label: 'FIXED', color: '#22c55e', value: severity.fixedDefects },
+                  { label: 'CLOSED', color: '#166534', value: severity.closedDefects },
+                  { label: 'REJECTED', color: '#b91c1c', value: severity.rejectedDefects },
+                  { label: 'DUPLICATE', color: '#6b7280', value: severity.duplicateDefects },
+                ],
+              })}>
+                <Text style={[styles.severityCardButtonText, { color: '#fff' }]}>View Chart</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity style={[styles.severityCardButton, { backgroundColor: '#03084a' }]} onPress={() => openModal(card)}>
-              <Text style={[styles.severityCardButtonText, { color: '#fff' }]}>View Chart</Text>
-            </TouchableOpacity>
-          </View>
-        ))}
-        </View>
-        {/* Defect Density Section */}
-        <View style={styles.severityCardGroup}>
+          ))
+        ) : (
           <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
+            <View style={styles.severityCardHeader}>
+              <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Defect Severity Breakdown</Text>
+            </View>
+            <View style={{ alignItems: 'center', padding: 20 }}>
+              <Text style={styles.noDataText}>No severity breakdown data available</Text>
+            </View>
+          </View>
+        )}
+        </View>
+        {/* Defect Density Section - Single Dynamic Meter */}
+                  <View style={styles.severityCardGroup}>
+            <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
             <View style={styles.severityCardHeader}>
               <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Defect Density</Text>
             </View>
             <View style={styles.metricGaugeWrap}>
-              {(() => {
-                console.log('Defect Density Data:', defectDensity);
-                return true; // Always show meter
-              })() && (
+              {defectDensity ? (
                 <>
-                  <Text style={[styles.metricGaugeValue, { color: '#374151' }]}>
-                    Defect Density: <Text style={[styles.metricGaugeNum, { color: defectDensity ? getDefectDensityStatus(defectDensity.defectDensity).color : '#FBBF24' }]}>
-                      {defectDensity ? formatDefectDensity(defectDensity.defectDensity) : '8.25'}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={[styles.metricGaugeValue, { color: '#374151' }]}>
+                      Defect Density: <Text style={[styles.metricGaugeNum, { color: getDefectDensityStatus(defectDensity.defectDensity).color }]}>
+                        {formatDefectDensity(defectDensity.defectDensity)}
+                      </Text>
                     </Text>
-                  </Text>
-                  {/* Meter Chart */}
-                  <View style={styles.meterContainer}>
-                    <View style={styles.meterChartWrapper}>
-                      <Svg width={280} height={160} viewBox="0 0 280 160" style={styles.meterSvg}>
-                        {/* Green segment (0-7) - From left to top-left */}
-                        <Path
-                          d="M 50 140 A 90 90 0 0 1 113.64 63.64"
-                          fill="none"
+                    <ChangeIndicator defectDensity={defectDensity} />
+                  </View>
+                  {/* Dynamic Defect Density Meter Chart */}
+              <View style={styles.meterContainer}>
+                <View style={styles.meterChartWrapper}>
+                  <Svg width={280} height={160} viewBox="0 0 280 160" style={styles.meterSvg}>
+                    {/* Green segment (0-7) - From left to top-left */}
+                    <Path
+                      d="M 50 140 A 90 90 0 0 1 113.64 63.64"
+                      fill="none"
                           stroke="#22C55E"
                           strokeWidth={20}
-                          strokeLinecap="butt"
-                        />
+                      strokeLinecap="butt"
+                    />
 
                         {/* Yellow segment (7-10) - From top-left to top-right */}
-                        <Path
-                          d="M 113.64 63.64 A 90 90 0 0 1 166.36 63.64"
-                          fill="none"
-                          stroke="#FBBF24"
+                    <Path
+                      d="M 113.64 63.64 A 90 90 0 0 1 166.36 63.64"
+                      fill="none"
+                      stroke="#FBBF24"
                           strokeWidth={20}
-                          strokeLinecap="butt"
-                        />
+                      strokeLinecap="butt"
+                    />
 
-                        {/* Red segment (10+) - From top-right to right */}
-                        <Path
-                          d="M 166.36 63.64 A 90 90 0 0 1 230 140"
-                          fill="none"
-                          stroke="#EF4444"
+                    {/* Red segment (10+) - From top-right to right */}
+                    <Path
+                      d="M 166.36 63.64 A 90 90 0 0 1 230 140"
+                      fill="none"
+                      stroke="#EF4444"
                           strokeWidth={20}
-                          strokeLinecap="butt"
-                        />
+                      strokeLinecap="butt"
+                    />
 
-                        {/* Dynamic Needle based on defect density */}
+                        {/* Dynamic Needle based on actual defect density */}
                         {(() => {
-                          const density = defectDensity ? defectDensity.defectDensity : 8.25;
+                          const density = defectDensity.defectDensity;
 
                           // Calculate needle position based on value ranges:
                           // 0-7: Green zone (180° to 126°)
@@ -886,89 +1121,48 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
                           const endY = 140 - needleLength * Math.sin(angleRad);
 
                           return (
-                            <Path
+                    <Path
                               d={`M 140 140 L ${endX} ${endY}`}
-                              stroke="#374151"
+                      stroke="#374151"
                               strokeWidth={4}
-                              strokeLinecap="round"
-                            />
+                      strokeLinecap="round"
+                    />
                           );
                         })()}
 
                         {/* Needle center circle */}
-                        <Circle
-                          cx="140"
-                          cy="140"
+                    <Circle
+                      cx="140"
+                      cy="140"
                           r="12"
-                          fill="#374151"
-                        />
-                      </Svg>
+                      fill="#374151"
+                    />
+                  </Svg>
 
                       {/* Scale labels */}
-                      <Text style={[styles.meterLabel, styles.zeroLabel]}>0</Text>
-                      <Text style={[styles.meterLabel, styles.sevenLabel]}>7</Text>
-                      <Text style={[styles.meterLabel, styles.tenLabel]}>10</Text>
-                    </View>
-                  </View>
-                  {/* Density Details */}
+                  <Text style={[styles.meterLabel, styles.zeroLabel]}>0</Text>
+                  <Text style={[styles.meterLabel, styles.sevenLabel]}>7</Text>
+                  <Text style={[styles.meterLabel, styles.tenLabel]}>10</Text>
+                </View>
+              </View>
+                  {/* Defect Density Details */}
                   <View style={styles.densityDetailsContainer}>
                     <Text style={styles.densityDetailsText}>
-                      Total Defects: {defectDensity ? defectDensity.defects : 'N/A'} | Lines of Code: {defectDensity ? defectDensity.kloc.toLocaleString() : 'N/A'}
+                      Total Defects: {defectDensity.defects} | Lines of Code: {defectDensity.kloc.toLocaleString()}
                     </Text>
                     <Text style={styles.densityUnitText}>
-                      Quality: {defectDensity ? defectDensity.meaning : 'Sample Data'} | Range: {defectDensity ? defectDensity.range : '7.0 - 10.0'}
+                      Quality: {defectDensity.meaning} | Range: {defectDensity.range}
                     </Text>
-                    {/* Zone Test Buttons */}
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 10 }}>
-                      {/* <TouchableOpacity
-                        style={{ backgroundColor: '#22C55E', padding: 6, borderRadius: 4, minWidth: 60 }}
-                        onPress={() => setDefectDensity({ defects: 15, defectDensity: 3.5, kloc: 4000, meaning: 'Good', range: '0-7', color: 'Green' })}
-                      >
-                        <Text style={{ color: 'white', fontSize: 10, textAlign: 'center' }}>Green 3.5</Text>
-                      </TouchableOpacity> */}
-                      {/* <TouchableOpacity
-                        style={{ backgroundColor: '#FBBF24', padding: 6, borderRadius: 4, minWidth: 60 }}
-                        onPress={() => setDefectDensity({ defects: 25, defectDensity: 8.25, kloc: 3000, meaning: 'Fair', range: '7-10', color: 'Yellow' })}
-                      >
-                        <Text style={{ color: 'white', fontSize: 10, textAlign: 'center' }}>Yellow 8.25</Text>
-                      </TouchableOpacity> */}
-                      {/* <TouchableOpacity
-                        style={{ backgroundColor: '#EF4444', padding: 6, borderRadius: 4, minWidth: 60 }}
-                        onPress={() => setDefectDensity({ defects: 35, defectDensity: 12.5, kloc: 2700, meaning: 'Poor', range: '10+', color: 'Red' })}
-                      >
-                        <Text style={{ color: 'white', fontSize: 10, textAlign: 'center' }}>Red 12.5</Text>
-                      </TouchableOpacity> */}
-                    </View>
-                    {/* Test buttons for different density values */}
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 10 }}>
-                      <TouchableOpacity
-                        // style={{ backgroundColor: '#22C55E', padding: 8, borderRadius: 4 }}
-                        // onPress={() => setDefectDensity({ defects: 15, defectDensity: 2.5, kloc: 6000, meaning: 'Good', range: '0-7', color: 'Green' })}
-                      >
-                        
-                      {/* </TouchableOpacity>
-                      <TouchableOpacity
-                        style={{ backgroundColor: '#FBBF24', padding: 8, borderRadius: 4 }}
-                        onPress={() => setDefectDensity({ defects: 25, defectDensity: 8.23, kloc: 3000, meaning: 'Fair', range: '7-10', color: 'Yellow' })}
-                      > */}
-                       
-                      {/* </TouchableOpacity>
-                      <TouchableOpacity
-                        style={{ backgroundColor: '#EF4444', padding: 8, borderRadius: 4 }}
-                        onPress={() => setDefectDensity({ defects: 35, defectDensity: 12.8, kloc: 2700, meaning: 'Poor', range: '10+', color: 'Red' })}
-                      > */}
-                        
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+            </View>
                 </>
-              )}
-              {!defectDensity && (
+              ) : (
                 <>
-                  <Text style={[styles.metricGaugeValue, { color: '#374151' }]}>
-                    Defect Density: <Text style={[styles.metricGaugeNum, { color: '#9ca3af' }]}>--</Text>
-                  </Text>
-                  {/* Meter Chart */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={[styles.metricGaugeValue, { color: '#374151' }]}>
+                      Defect Density: <Text style={[styles.metricGaugeNum, { color: '#9ca3af' }]}>--</Text>
+                    </Text>
+                  </View>
+                  {/* Empty Meter Chart */}
                   <View style={styles.meterContainer}>
                     <View style={styles.meterChartWrapper}>
                       <Svg width={280} height={160} viewBox="0 0 280 160" style={styles.meterSvg}>
@@ -999,21 +1193,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
                           strokeLinecap="butt"
                         />
 
-                        {/* Static needle for no data */}
-                        <Path
-                          d="M 140 140 L 50 140"
-                          stroke="#9ca3af"
-                          strokeWidth={4}
-                          strokeLinecap="round"
-                        />
-
-                        {/* Needle center circle for no data */}
-                        <Circle
-                          cx="140"
-                          cy="140"
-                          r="12"
-                          fill="#9ca3af"
-                        />
+                        {/* No needle - empty meter */}
                       </Svg>
 
                       {/* Scale labels */}
@@ -1021,6 +1201,15 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
                       <Text style={[styles.meterLabel, styles.sevenLabel]}>7</Text>
                       <Text style={[styles.meterLabel, styles.tenLabel]}>10</Text>
                     </View>
+                  </View>
+                  {/* Empty Details */}
+                  <View style={styles.densityDetailsContainer}>
+                    <Text style={styles.densityDetailsText}>
+                      No Data Available
+                    </Text>
+                    <Text style={styles.densityUnitText}>
+                      Defect Density data not loaded
+                    </Text>
                   </View>
                 </>
               )}
@@ -1060,7 +1249,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
                     <Text style={styles.metricRatioBadgeText}>
                       {defectSeverityIndex.interpretation.toUpperCase()}
                     </Text>
-                  </View>
+            </View>
                   {/* DSI Details */}
                   <View style={styles.severityBreakdownContainer}>
                     <Text style={styles.severityBreakdownTitle}>DSI Details:</Text>
@@ -1119,10 +1308,10 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
                     <Text style={styles.metricRatioBadgeText}>
                       {defectRemarkRatio.category.toUpperCase()}
                     </Text>
-                  </View>
-                  {/* Horizontal Meter */}
-                  <View style={styles.ratioMeterContainer}>
-                    <View style={styles.ratioMeterTrack}>
+              </View>
+              {/* Horizontal Meter */}
+              <View style={styles.ratioMeterContainer}>
+                <View style={styles.ratioMeterTrack}>
                       <View style={[
                         styles.ratioMeterFill, 
                         { 
@@ -1137,19 +1326,19 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
                           borderColor: getRatioStatusColor(defectRemarkRatio.category)
                         }
                       ]} />
-                    </View>
-                    <View style={styles.ratioMeterLabels}>
-                      <Text style={styles.ratioMeterLabel}>0.0</Text>
-                      <Text style={styles.ratioMeterLabel}>0.5</Text>
-                      <Text style={styles.ratioMeterLabel}>1.0</Text>
-                    </View>
-                  </View>
+                </View>
+                <View style={styles.ratioMeterLabels}>
+                  <Text style={styles.ratioMeterLabel}>0.0</Text>
+                  <Text style={styles.ratioMeterLabel}>0.5</Text>
+                  <Text style={styles.ratioMeterLabel}>1.0</Text>
+                </View>
+              </View>
                   {/* Additional Details */}
                   <View style={styles.ratioDetailsContainer}>
                     <Text style={styles.ratioDetailsText}>
                       Defects: {defectRemarkRatio.defectCount} | Remarks: {defectRemarkRatio.remarkCount}
                     </Text>
-                  </View>
+            </View>
                 </>
               ) : (
                 <>
@@ -1179,6 +1368,8 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
             </View>
           </View>
         </View>
+
+
 
        {/* Defects Reopened Multiple Times Section */}
        <View style={styles.severityCardGroup}>
@@ -1287,67 +1478,95 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
        <View style={styles.severityCardGroup}>
          <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
            <View style={styles.severityCardHeader}>
-             <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>{CHART_CARDS[1].title}</Text>
+             <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Defect Distribution by Type</Text>
            </View>
            <View style={{ alignItems: 'center', marginTop: 10 }}>
-             {/* Pie Chart */}
-             <View style={styles.smallPieChartContainer}>
-               <Svg width={120} height={120} viewBox="0 0 120 120">
-                 {(() => {
-                   const typeData = PIE_CARDS[1];
-                   const total = typeData.chartData.reduce((sum: number, value: number) => sum + value, 0);
-                   let currentAngle = 0;
-                   
-                   return typeData.chartData.map((value: number, index: number) => {
-                     if (value === 0) return null;
-                     const angle = (value / total) * 360;
-                     const startAngle = currentAngle;
-                     const endAngle = currentAngle + angle;
-                     currentAngle += angle;
-                     
-                     // Convert angles to radians
-                     const startRad = (Math.PI / 180) * startAngle;
-                     const endRad = (Math.PI / 180) * endAngle;
-                     const x1 = 60 + 60 * Math.cos(startRad);
-                     const y1 = 60 + 60 * Math.sin(startRad);
-                     const x2 = 60 + 60 * Math.cos(endRad);
-                     const y2 = 60 + 60 * Math.sin(endRad);
-                     const largeArc = angle > 180 ? 1 : 0;
-                     const pathData = `M60,60 L${x1},${y1} A60,60 0 ${largeArc} 1 ${x2},${y2} Z`;
-                     
-                     return (
-                       <Path
-                         key={index}
-                         d={pathData}
-                         fill={typeData.chartColors[index]}
-                         stroke="#fff"
-                         strokeWidth={1}
-                       />
-                     );
-                   });
-                 })()}
-               </Svg>
-             </View>
-
-             <View style={styles.pieLegend}>
-               {(CHART_CARDS[1].legend ?? []).map(item => (
-                 <View key={item.label} style={styles.pieLegendItem}>
-                   <View style={[styles.pieLegendDot, { backgroundColor: item.color }]} />
-                   <Text style={styles.pieLegendLabel}>{item.label}</Text>
+             {defectTypeDistribution ? (
+               <>
+                 {/* Pie Chart */}
+                 <View style={styles.smallPieChartContainer}>
+                   <Svg width={120} height={120} viewBox="0 0 120 120">
+                     {(() => {
+                       const chartColors = ['#3b82f6', '#10b981', '#fbbf24', '#ef4444', '#8b5cf6', '#f59e0b'];
+                       const total = defectTypeDistribution.defectTypes.reduce((sum, dt) => sum + dt.defectCount, 0);
+                       let currentAngle = 0;
+                       
+                       return defectTypeDistribution.defectTypes.map((defectType, index) => {
+                         if (defectType.defectCount === 0) return null;
+                         const angle = (defectType.defectCount / total) * 360;
+                         const startAngle = currentAngle;
+                         const endAngle = currentAngle + angle;
+                         currentAngle += angle;
+                         
+                         // Convert angles to radians
+                         const startRad = (Math.PI / 180) * startAngle;
+                         const endRad = (Math.PI / 180) * endAngle;
+                         const x1 = 60 + 60 * Math.cos(startRad);
+                         const y1 = 60 + 60 * Math.sin(startRad);
+                         const x2 = 60 + 60 * Math.cos(endRad);
+                         const y2 = 60 + 60 * Math.sin(endRad);
+                         const largeArc = angle > 180 ? 1 : 0;
+                         const pathData = `M60,60 L${x1},${y1} A60,60 0 ${largeArc} 1 ${x2},${y2} Z`;
+                         
+                         return (
+                           <Path
+                             key={defectType.defectType}
+                             d={pathData}
+                             fill={chartColors[index % chartColors.length]}
+                             stroke="#fff"
+                             strokeWidth={1}
+                           />
+                         );
+                       });
+                     })()}
+                   </Svg>
                  </View>
-               ))}
-             </View>
-             <View style={styles.pieCardFooter}>
-               <Text style={styles.pieCardFooterTotal}>{CHART_CARDS[1]?.total}</Text>
-               <Text style={styles.pieCardFooterLabel}>Total Defects</Text>
-               <Text style={styles.pieCardFooterMost}>{CHART_CARDS[1]?.mostCommon?.value}</Text>
-               <Text style={styles.pieCardFooterMostLabel}>Most Common
-                 <Text style={styles.pieCardFooterMostType}> {CHART_CARDS[1]?.mostCommon?.label}</Text>
-               </Text>
-             </View>
+
+                 <View style={styles.pieLegend}>
+                   {defectTypeDistribution.defectTypes.map((defectType, index) => (
+                     <View key={defectType.defectType} style={styles.pieLegendItem}>
+                       <View style={[styles.pieLegendDot, { backgroundColor: ['#3b82f6', '#10b981', '#fbbf24', '#ef4444', '#8b5cf6', '#f59e0b'][index % 6] }]} />
+                       <Text style={styles.pieLegendLabel}>
+                         {defectType.defectType}: {defectType.defectCount} ({defectType.percentage.toFixed(1)}%)
+                       </Text>
+                     </View>
+                   ))}
+                 </View>
+                 <View style={styles.pieCardFooter}>
+                   <Text style={styles.pieCardFooterTotal}>{defectTypeDistribution.totalDefectCount}</Text>
+                   <Text style={styles.pieCardFooterLabel}>Total Defects</Text>
+                   <Text style={styles.pieCardFooterMost}>{defectTypeDistribution.mostCommonDefectCount}</Text>
+                   <Text style={styles.pieCardFooterMostLabel}>Most Common
+                     <Text style={styles.pieCardFooterMostType}> {defectTypeDistribution.mostCommonDefectType}</Text>
+                   </Text>
+                 </View>
+               </>
+             ) : (
+               <>
+                 {/* Empty Pie Chart */}
+                 <View style={styles.smallPieChartContainer}>
+                   <Svg width={120} height={120} viewBox="0 0 120 120">
+                     {/* Empty chart - just show a gray circle */}
+                     <Circle cx="60" cy="60" r="60" fill="#f3f4f6" />
+                   </Svg>
+                 </View>
+                 <View style={styles.pieLegend}>
+                   <Text style={styles.noDataText}>No defect type data available</Text>
+                 </View>
+                 <View style={styles.pieCardFooter}>
+                   <Text style={styles.pieCardFooterTotal}>--</Text>
+                   <Text style={styles.pieCardFooterLabel}>Total Defects</Text>
+                   <Text style={styles.pieCardFooterMost}>--</Text>
+                   <Text style={styles.pieCardFooterMostLabel}>Most Common
+                     <Text style={styles.pieCardFooterMostType}> No Data</Text>
+                   </Text>
+                 </View>
+               </>
+             )}
            </View>
          </View>
        </View>
+
 
        {/* Time to Find Defects Section */}
        <View style={styles.severityCardGroup}>
@@ -1446,77 +1665,114 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
            </View>
          </View>
        </View>
-
-       {/* Defects by Module Section */}
+ 
+       
+       
+       {/* Defect by Module Section */}
        <View style={styles.severityCardGroup}>
          <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
            <View style={styles.severityCardHeader}>
-             <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>{CHART_CARDS[4].title}</Text>
+             <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Defects by Module</Text>
            </View>
            <View style={{ alignItems: 'center', marginTop: 10 }}>
-             {/* Pie Chart */}
-             <View style={styles.largePieChartContainer}>
-               <Svg width={180} height={180} viewBox="0 0 180 180">
-                 {(() => {
-                   const moduleData = PIE_CARDS[2];
-                   const total = moduleData.chartData.reduce((sum: number, value: number) => sum + value, 0);
-                   let currentAngle = 0;
-                   
-                   return moduleData.chartData.map((value: number, index: number) => {
-                     if (value === 0) return null;
-                     const angle = (value / total) * 360;
-                     const startAngle = currentAngle;
-                     const endAngle = currentAngle + angle;
-                     currentAngle += angle;
-                     
-                     // Convert angles to radians
-                     const startRad = (Math.PI / 180) * startAngle;
-                     const endRad = (Math.PI / 180) * endAngle;
-                     const x1 = 90 + 90 * Math.cos(startRad);
-                     const y1 = 90 + 90 * Math.sin(startRad);
-                     const x2 = 90 + 90 * Math.cos(endRad);
-                     const y2 = 90 + 90 * Math.sin(endRad);
-                     const largeArc = angle > 180 ? 1 : 0;
-                     const pathData = `M90,90 L${x1},${y1} A90,90 0 ${largeArc} 1 ${x2},${y2} Z`;
-                     
-                     return (
-                       <Path
-                         key={index}
-                         d={pathData}
-                         fill={moduleData.chartColors[index]}
-                         stroke="#fff"
-                         strokeWidth={1}
-                       />
-                     );
-                   });
-                 })()}
-               </Svg>
-             </View>
-
-             {/* Legend */}
-             <View style={styles.moduleLegend}>
-               {(CHART_CARDS[4].legend ?? []).map(item => (
-                 <View key={item.label} style={styles.moduleLegendItem}>
-                   <View style={[styles.moduleLegendDot, { backgroundColor: item.color }]} />
-                   <Text style={styles.moduleLegendLabel}>{item.label}</Text>
+             {defectByModule && defectByModule.length > 0 ? (
+               <>
+                 {/* Pie Chart */}
+                 <View style={styles.smallPieChartContainer}>
+                   <Svg width={120} height={120} viewBox="0 0 120 120">
+                     {(() => {
+                       const chartColors = ['#3b82f6', '#10b981', '#fbbf24', '#ef4444', '#8b5cf6', '#f59e0b'];
+                       const total = defectByModule.reduce((sum, module) => sum + module.value, 0);
+                       let currentAngle = 0;
+                       
+                       return defectByModule.map((module, index) => {
+                         if (module.value === 0) return null;
+                         const angle = (module.value / total) * 360;
+                         const startAngle = currentAngle;
+                         const endAngle = currentAngle + angle;
+                         currentAngle += angle;
+                         
+                         // Convert angles to radians
+                         const startRad = (Math.PI / 180) * startAngle;
+                         const endRad = (Math.PI / 180) * endAngle;
+                         const x1 = 60 + 60 * Math.cos(startRad);
+                         const y1 = 60 + 60 * Math.sin(startRad);
+                         const x2 = 60 + 60 * Math.cos(endRad);
+                         const y2 = 60 + 60 * Math.sin(endRad);
+                         const largeArc = angle > 180 ? 1 : 0;
+                         const pathData = `M60,60 L${x1},${y1} A60,60 0 ${largeArc} 1 ${x2},${y2} Z`;
+                         
+                         return (
+                           <Path
+                             key={module.moduleId}
+                             d={pathData}
+                             fill={chartColors[index % chartColors.length]}
+                             stroke="#fff"
+                             strokeWidth={1}
+                           />
+                         );
+                       });
+                     })()}
+                   </Svg>
                  </View>
-               ))}
-             </View>
 
-             {/* Footer */}
-             <View style={styles.pieCardFooter}>
-               <Text style={styles.pieCardFooterTotal}>{CHART_CARDS[4]?.total}</Text>
-               <Text style={styles.pieCardFooterLabel}>Total Defects</Text>
-               <Text style={styles.pieCardFooterMost}>{CHART_CARDS[4]?.mostCommon?.value}</Text>
-               <Text style={styles.pieCardFooterMostLabel}>Most Common
-                 <Text style={styles.pieCardFooterMostType}> {CHART_CARDS[4]?.mostCommon?.label}</Text>
-               </Text>
-             </View>
+                 {/* Legend */}
+                 <View style={styles.pieLegend}>
+                   {defectByModule.map((module, index) => (
+                     <View key={module.moduleId} style={styles.pieLegendItem}>
+                       <View style={[styles.pieLegendDot, { backgroundColor: ['#3b82f6', '#10b981', '#fbbf24', '#ef4444', '#8b5cf6', '#f59e0b'][index % 6] }]} />
+                       <Text style={styles.pieLegendLabel}>
+                         {module.name}: {module.value} ({module.percentage.toFixed(1)}%)
+                       </Text>
+                     </View>
+                   ))}
+                 </View>
+
+                 {/* Summary */}
+                 <View style={styles.pieCardFooter}>
+                   <Text style={styles.pieCardFooterTotal}>{defectByModule.reduce((sum, module) => sum + module.value, 0)}</Text>
+                   <Text style={styles.pieCardFooterLabel}>Total Defects</Text>
+                   <Text style={styles.pieCardFooterMost}>
+                     {defectByModule.reduce((max, module) => module.value > max.value ? module : max, defectByModule[0]).value}
+                   </Text>
+                   <Text style={styles.pieCardFooterMostLabel}>Most Common
+                     <Text style={styles.pieCardFooterMostType}> {defectByModule.reduce((max, module) => module.value > max.value ? module : max, defectByModule[0]).name}</Text>
+                   </Text>
+                 </View>
+               </>
+             ) : (
+               <>
+                 {/* Empty Pie Chart */}
+                 <View style={styles.smallPieChartContainer}>
+                   <Svg width={120} height={120} viewBox="0 0 120 120">
+                     {/* Empty chart - just show a gray circle */}
+                     <Circle cx="60" cy="60" r="60" fill="#f3f4f6" />
+                   </Svg>
+                 </View>
+                 <View style={styles.pieLegend}>
+                   <Text style={styles.noDataText}>No module data available</Text>
+                 </View>
+                 <View style={styles.pieCardFooter}>
+                   <Text style={styles.pieCardFooterTotal}>--</Text>
+                   <Text style={styles.pieCardFooterLabel}>Total Defects</Text>
+                   <Text style={styles.pieCardFooterMost}>--</Text>
+                   <Text style={styles.pieCardFooterMostLabel}>Most Common
+                     <Text style={styles.pieCardFooterMostType}> No Data</Text>
+                   </Text>
+                 </View>
+               </>
+             )}
            </View>
          </View>
        </View>
+
+            
+
+            
+            
+        
       </ScrollView>
-      </ImageBackground>
+      </ImageBackground> 
       {/* Modal for Reopened Defects */}
       <Modal
         animationType="fade"
@@ -1630,26 +1886,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
 };
 
 const styles = StyleSheet.create({
-  backButton: {
-    alignSelf: 'flex-start',
-    marginTop: 18,
-    marginLeft: 18,
-    marginBottom: 8,
-    backgroundColor: '#eddec9',
-    paddingVertical: 6,  
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  backButtonText: {
-    color: '#1e293b',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+
   selectionWrap: {
     width: '96%',
     marginTop: 65, // Increased from 24 for lower positioning
@@ -2377,14 +2614,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     margin: 10,
   },
-  customBackButton: {
-    position: 'absolute',
-    top: 5,
-    left: 10,
-    zIndex: 20,
-    backgroundColor: 'transparent',
-    padding: 4,
-  },
+
   defectDensityCard: {
     backgroundColor: 'rgba(237, 222, 201, 0.95)',
     borderWidth: 0,
@@ -2688,6 +2918,119 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     textAlign: 'center',
     marginTop: 4,
+  },
+  changeIndicatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  changeIndicatorText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: 2,
+  },
+
+  noDataText: {
+    fontSize: 14,
+    color: '#9ca3af',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginTop: 20,
+  },
+  // Module styles
+  moduleListContainer: {
+    width: '100%',
+    paddingHorizontal: 16,
+  },
+  moduleItem: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  moduleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  moduleName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#374151',
+    flex: 1,
+  },
+  moduleTotal: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  moduleStats: {
+    marginBottom: 8,
+  },
+  moduleStatRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  moduleStatLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  severityDistribution: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  severityTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  severityBars: {
+    flexDirection: 'row',
+    height: 8,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 4,
+    marginBottom: 4,
+    overflow: 'hidden',
+  },
+  severityBar: {
+    height: '100%',
+  },
+  severityLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  severityLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  moduleSummary: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    alignItems: 'center',
+  },
+  moduleSummaryTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  moduleSummaryText: {
+    fontSize: 12,
+    color: '#6b7280',
+    textAlign: 'center',
   },
   // End of StyleSheet
 });

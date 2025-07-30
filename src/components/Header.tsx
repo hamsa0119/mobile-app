@@ -53,7 +53,7 @@ const Header: React.FC<HeaderProps> = ({
           <Text style={styles.subtitle}>Track Your Next Defect</Text>
         </View>
         <TouchableOpacity style={styles.notificationButton} onPress={handleNotificationPress}>
-          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
             <Path
               d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"
               stroke="#03084a"
@@ -72,7 +72,7 @@ const Header: React.FC<HeaderProps> = ({
           {hasNotifications && <View style={styles.notificationBadge} />}
         </TouchableOpacity>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
             <Path
               d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
               stroke="#03084a"

@@ -21,44 +21,62 @@ import Header from '../components/Header';
 import { getAllProjects, Project } from '../api/projectget';
 import { getProjectCardColors, ProjectCardColor, getDefaultProjectCardColor } from '../api/projectcardcolor';
 
-const STATUS = [
-  {
-    key: 'high',
-    label: 'High Risk Projects',
-    count: 3,
-    color: '#ad0c0c',
-    icon: '🛑',
-    border: '#ad0c0c',
-    borderDark: '#b71c1c',
-    bg: '#fff5f5',
-    dot: '#ad0c0c',
-    tag: 'High Risk',
-  },
-  {
-    key: 'medium',
-    label: 'Medium Risk Projects ',
-    count: 1,
-    color: '#e3b707',
-    icon: '⚠️',
-    border: '#fbbf24',
-    borderDark: '#e3b707',
-    bg: '#fffbe6',
-    dot: '#e3b707',
-    tag: 'Medium Risk',
-  },
-  {
-    key: 'low',
-    label: 'Low\nRisk\nProject',
-    count: 19,
-    color: '#0b9c40',
-    icon: '✅',
-    border: '#0b9c40',
-    borderDark: '#166534',
-    bg: '#f0fff4',
-    dot: '#0b9c40',
-    tag: 'Low Risk',
-  },
-];
+// Define the dashboard project type
+type DashboardProject = {
+  name: string;
+  risk: 'high' | 'medium' | 'low';
+  id?: number;
+  status?: string;
+  projectName?: string;
+  projectStatus?: string;
+};
+
+// Dynamic status configuration - will be calculated based on project data
+const getStatusConfig = (projects: DashboardProject[], getRiskLevelFromCardColor: (projectId: number | undefined) => 'high' | 'medium' | 'low') => {
+  // Count projects by risk level based on card colors
+  const highRiskCount = projects.filter(p => getRiskLevelFromCardColor(p.id) === 'high').length;
+  const mediumRiskCount = projects.filter(p => getRiskLevelFromCardColor(p.id) === 'medium').length;
+  const lowRiskCount = projects.filter(p => getRiskLevelFromCardColor(p.id) === 'low').length;
+
+  return [
+    {
+      key: 'high',
+      label: 'High Risk Projects',
+      count: highRiskCount,
+      color: '#ad0c0c',
+      icon: '🛑',
+      border: '#ad0c0c',
+      borderDark: '#b71c1c',
+      bg: '#fff5f5',
+      dot: '#ad0c0c',
+      tag: 'High Risk',
+    },
+    {
+      key: 'medium',
+      label: 'Medium Risk Projects ',
+      count: mediumRiskCount,
+      color: '#e3b707',
+      icon: '⚠️',
+      border: '#fbbf24',
+      borderDark: '#e3b707',
+      bg: '#fffbe6',
+      dot: '#e3b707',
+      tag: 'Medium Risk',
+    },
+    {
+      key: 'low',
+      label: 'Low\nRisk\nProject',
+      count: lowRiskCount,
+      color: '#0b9c40',
+      icon: '✅',
+      border: '#0b9c40',
+      borderDark: '#166534',
+      bg: '#f0fff4',
+      dot: '#0b9c40',
+      tag: 'Low Risk',
+    },
+  ];
+};
 
 const PROJECTS = [
   { name: 'Defect Tracker', risk: 'high' },
@@ -187,12 +205,11 @@ const ProjectCard = ({ color, icon, name, tag, onPress }: { color: string; icon:
 };
 
 interface DashboardProps {
-  onProjectSelect?: (projectName: string) => void;
-  onBack?: () => void;
+  onProjectSelect?: (projectName: string, riskLevel: 'high' | 'medium' | 'low') => void;
   onLogout?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onLogout }) => {
   // API State
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectColors, setProjectColors] = useState<ProjectCardColor[]>([]);
@@ -269,16 +286,19 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout
   // Map API projects to dashboard format with risk levels
   const mapProjectsToDashboard = (apiProjects: Project[]) => {
     return apiProjects.map(project => {
+      // Use projectStatus from API, fallback to status
+      const status = project.projectStatus || project.status || '';
+      
       // Map backend status to risk level
       let risk = 'low';
-      if (project.status?.toLowerCase().includes('high') || project.status?.toLowerCase().includes('critical')) {
+      if (status.toLowerCase().includes('high') || status.toLowerCase().includes('critical') || status.toLowerCase().includes('active')) {
         risk = 'high';
-      } else if (project.status?.toLowerCase().includes('medium') || project.status?.toLowerCase().includes('moderate')) {
+      } else if (status.toLowerCase().includes('medium') || status.toLowerCase().includes('moderate') || status.toLowerCase().includes('completed')) {
         risk = 'medium';
       }
       
       return {
-        name: project.name,
+        name: project.projectName || project.name,
         risk: risk as 'high' | 'medium' | 'low',
         id: project.id,
         status: project.status,
@@ -298,9 +318,42 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout
     projectStatus?: string;
   };
 
+  // Function to get risk level based on card color from API
+  const getRiskLevelFromCardColor = (projectId: number | undefined): 'high' | 'medium' | 'low' => {
+    const customColor = projectColors.find(color => color.projectId === projectId);
+    
+    if (customColor && customColor.projectCardColor) {
+      const gradientMatch = customColor.projectCardColor.match(/from-(\w+)-(\d+)/);
+      if (gradientMatch) {
+        const colorName = gradientMatch[1];
+        console.log(`Project ${projectId}: Card color is ${colorName}, risk level will be ${colorName === 'yellow' ? 'medium' : colorName === 'red' ? 'high' : 'low'}`);
+        
+        // Determine risk level based on color
+        if (colorName === 'yellow') {
+          return 'medium';
+        } else if (colorName === 'red') {
+          return 'high';
+        } else if (colorName === 'green') {
+          return 'low';
+        }
+      }
+    }
+    
+    // Fallback to status-based risk
+    console.log(`Project ${projectId}: No card color found, using fallback risk level: low`);
+    return 'low';
+  };
+
   // Use API data with fallback to static data
   const dashboardProjects: DashboardProject[] = projects.length > 0 ? mapProjectsToDashboard(projects) : PROJECTS.map(p => ({ name: p.name, risk: p.risk as 'high' | 'medium' | 'low' }));
-  const filteredProjects = filter === 'all' ? dashboardProjects : dashboardProjects.filter(p => p.risk === filter);
+  
+  // Get dynamic status configuration based on project data
+  const statusConfig = getStatusConfig(dashboardProjects, getRiskLevelFromCardColor);
+  
+  // Filter projects based on card color risk level
+  const filteredProjects = filter === 'all' 
+    ? dashboardProjects 
+    : dashboardProjects.filter(p => getRiskLevelFromCardColor(p.id) === filter);
   
   // Sort: high (red) first, then medium (yellow), then low (green)
   const riskOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
@@ -326,29 +379,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout
             />
           }
         >
-          {/* Back Button */}
-          {onBack && (
-            <TouchableOpacity style={styles.customBackButton} onPress={onBack}>
-              <Svg width={44} height={44} viewBox="0 0 48 48">
-                <Path
-                  d="M36 24H12M12 24l8-8M12 24l8 8"
-                  fill="none"
-                  stroke="rgba(237, 222, 201, 0.95)"
-                  strokeWidth={3.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <Path
-                  d="M12 24c8 0 16 0 16 0"
-                  fill="none"
-                  stroke="rgba(237, 222, 201, 0.95)"
-                  strokeWidth={3.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            </TouchableOpacity>
-          )}
+
           {/* Header */}
           <Text style={[styles.header, { color: 'hsla(35, 23.10%, 66.90%, 0.95)' }]}>Dashboard Overview</Text>
           <Text style={[styles.subtitle, { color: 'rgba(163, 142, 117, 0.95)' }]}>Gain insights into your projects with real-time health metrics and status summaries</Text>
@@ -358,7 +389,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout
             <Text style={[styles.sectionTitle, { color: 'rgba(237, 222, 201, 0.95)' }]}>Project Status Insights</Text>
             <View style={styles.statusCardGroup}>
               <View style={styles.statusRowFixed}>
-                {STATUS.filter(s => typeof s.count === 'number').map((s, idx) => (
+                {statusConfig.filter(s => typeof s.count === 'number').map((s, idx) => (
                   <View
                     key={s.key}
                     style={[
@@ -520,55 +551,75 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout
               </View>
             ) : (
               <>
-                <View style={[styles.filterRow, isSmallScreen && styles.filterRowMobile]}>
-                  <View style={[styles.filterBar, isSmallScreen && styles.filterBarMobile]}>
-                    {FILTERS.map(f => {
-                      let activeBg = '#2563eb';
-                      let activeText = '#fff';
-                      if (f.key === 'all') {
-                        activeBg = '#03084a';
-                        activeText = '#fff';
-                      } else if (f.key === 'high') {
-                        activeBg = '#ad0c0c';
-                        activeText = '#fff';
-                      } else if (f.key === 'medium') {
-                        activeBg = '#e3b707';
-                        activeText = '#fff';
-                      } else if (f.key === 'low') {
-                        activeBg = '#0b9c40';
-                        activeText = '#fff';
-                      }
-                      return (
-                        <TouchableOpacity
-                          key={f.key}
-                          style={[
-                            styles.filterBtn,
-                            filter === f.key && { backgroundColor: activeBg, shadowColor: activeBg, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 6, elevation: 2 },
-                            isSmallScreen && styles.filterBtnMobile
-                          ]}
-                          onPress={() => setFilter(f.key)}
-                        >
-                          <Text style={[
-                            styles.filterBtnText,
-                            filter === f.key && { color: activeText },
-                            isSmallScreen && styles.filterBtnTextMobile
-                          ]}>{f.label}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
+            <View style={[styles.filterRow, isSmallScreen && styles.filterRowMobile]}>
+              <View style={[styles.filterBar, isSmallScreen && styles.filterBarMobile]}>
+                {/* Always show "All Projects" filter */}
+                    <TouchableOpacity
+                  key="all"
+                      style={[
+                        styles.filterBtn,
+                    filter === 'all' && { backgroundColor: '#03084a', shadowColor: '#03084a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.10, shadowRadius: 6, elevation: 2 },
+                        isSmallScreen && styles.filterBtnMobile
+                      ]}
+                  onPress={() => setFilter('all')}
+                    >
+                      <Text style={[
+                        styles.filterBtnText,
+                    filter === 'all' && { color: '#fff' },
+                        isSmallScreen && styles.filterBtnTextMobile
+                  ]}>All Projects</Text>
+                    </TouchableOpacity>
+
+                {/* Always show all risk filters */}
+                {(() => {
+                  const availableRisks = new Set(dashboardProjects.map(p => getRiskLevelFromCardColor(p.id)));
+                  console.log('Available risks from card colors:', Array.from(availableRisks));
+                  
+                  const riskFilters = [
+                    { key: 'high', label: 'High Risk', bg: '#ad0c0c', text: '#fff' },
+                    { key: 'medium', label: 'Medium Risk', bg: '#e3b707', text: '#fff' },
+                    { key: 'low', label: 'Low Risk', bg: '#0b9c40', text: '#fff' }
+                  ];
+
+                  return riskFilters
+                    .map(riskFilter => (
+                      <TouchableOpacity
+                        key={riskFilter.key}
+                        style={[
+                          styles.filterBtn,
+                          filter === riskFilter.key && { 
+                            backgroundColor: riskFilter.bg, 
+                            shadowColor: riskFilter.bg, 
+                            shadowOffset: { width: 0, height: 2 }, 
+                            shadowOpacity: 0.10, 
+                            shadowRadius: 6, 
+                            elevation: 2 
+                          },
+                          isSmallScreen && styles.filterBtnMobile
+                        ]}
+                        onPress={() => setFilter(riskFilter.key)}
+                      >
+                        <Text style={[
+                          styles.filterBtnText,
+                          filter === riskFilter.key && { color: riskFilter.text },
+                          isSmallScreen && styles.filterBtnTextMobile
+                        ]}>{riskFilter.label}</Text>
+                      </TouchableOpacity>
+                    ));
+                })()}
+              </View>
+            </View>
                 
                 {sortedProjects.length > 0 ? (
-                  <View style={styles.projectGridFixed}>
-                                    {sortedProjects.map((p, i) => {
-                  const s = STATUS.find(s => s.key === p.risk) || STATUS[2];
-                  
+            <View style={styles.projectGridFixed}>
+              {sortedProjects.map((p, i) => {
                   // Find custom color for this project
                   const customColor = projectColors.find(color => color.projectId === p.id);
                   
                   // Convert gradient to solid color for project cards
-                  let cardColor = s.color; // Default to risk-based color
+                  let cardColor = '#6b7280'; // Default gray color
+                  let riskLevel = 'low'; // Default risk level
+                  
                   if (customColor && customColor.projectCardColor) {
                     // Extract color from gradient string like "bg-gradient-to-r from-yellow-400 to-yellow-500"
                     const gradientMatch = customColor.projectCardColor.match(/from-(\w+)-(\d+)/);
@@ -605,22 +656,39 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout
                         },
                       };
                       
-                      cardColor = colorMap[colorName]?.[intensity] || s.color;
+                      cardColor = colorMap[colorName]?.[intensity] || '#6b7280';
+                      
+                      // Determine risk level based on color
+                      if (colorName === 'yellow') {
+                        riskLevel = 'medium';
+                      } else if (colorName === 'red') {
+                        riskLevel = 'high';
+                      } else if (colorName === 'green') {
+                        riskLevel = 'low';
+                      }
                     }
+                  } else {
+                    // Fallback to original risk-based color
+                    const statusObj = statusConfig.find(s => s.key === p.risk) || statusConfig[2];
+                    cardColor = statusObj.color;
+                    riskLevel = p.risk;
                   }
                   
-                  return (
+                  // Get status object based on determined risk level
+                  const statusObj = statusConfig.find(s => s.key === riskLevel) || statusConfig[2];
+                  
+                                  return (
                     <ProjectCard
                       key={p.id || p.name + i}
                       color={cardColor}
-                      icon={"✔️"}
-                      name={p.name}
-                      tag={s.tag}
-                      onPress={() => onProjectSelect && onProjectSelect(p.name)}
-                    />
-                  );
-                })}
-                  </View>
+                    icon={"✔️"}
+                    name={p.name}
+                    tag={statusObj.tag}
+                    onPress={() => onProjectSelect && onProjectSelect(p.name, getRiskLevelFromCardColor(p.id))}
+                  />
+                );
+              })}
+            </View>
                 ) : (
                   <View style={styles.noProjectsContainer}>
                     <Text style={styles.noProjectsText}>No projects available</Text>
@@ -1041,19 +1109,7 @@ const styles = StyleSheet.create({
     marginTop: 0,
     marginBottom: 10,
   },
-  customBackButton: {
-    position: 'absolute',
-    top: 5,
-    left: 10,
-    zIndex: 20,
-    backgroundColor: 'transparent',
-    padding: 4,
-  },
-  backButtonText: {
-    color: '#1e293b',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+
   statusCardGroup: {
     backgroundColor: 'rgba(237, 222, 201, 0.95)',
     borderRadius: 20,
