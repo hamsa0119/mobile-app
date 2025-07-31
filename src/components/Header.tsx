@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,14 @@ import {
   Platform,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import NotificationModal, { DefectNotification } from './NotificationModal';
 
 interface HeaderProps {
   userName?: string;
   onLogout?: () => void;
   onNotificationPress?: () => void;
   hasNotifications?: boolean;
+  defects?: DefectNotification[];
 }
 
 const defaultAvatar = require('../../assert/photo.jpeg');
@@ -23,8 +25,11 @@ const Header: React.FC<HeaderProps> = ({
   userName = 'Zayal', 
   onLogout, 
   onNotificationPress,
-  hasNotifications = true 
+  hasNotifications = true,
+  defects = []
 }) => {
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+
   const handleLogout = () => {
     Alert.alert(
       'Logout',
@@ -40,8 +45,12 @@ const Header: React.FC<HeaderProps> = ({
     if (onNotificationPress) {
       onNotificationPress();
     } else {
-      Alert.alert('Notifications', 'You have new notifications!');
+      setNotificationModalVisible(true);
     }
+  };
+
+  const closeNotificationModal = () => {
+    setNotificationModalVisible(false);
   };
 
   return (
@@ -69,7 +78,7 @@ const Header: React.FC<HeaderProps> = ({
               strokeLinejoin="round"
             />
           </Svg>
-          {hasNotifications && <View style={styles.notificationBadge} />}
+          {(hasNotifications || defects.length > 0) && <View style={styles.notificationBadge} />}
         </TouchableOpacity>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
@@ -97,6 +106,13 @@ const Header: React.FC<HeaderProps> = ({
           </Svg>
         </TouchableOpacity>
       </View>
+      
+      {/* Notification Modal */}
+      <NotificationModal
+        visible={notificationModalVisible}
+        onClose={closeNotificationModal}
+        defects={defects}
+      />
     </View>
   );
 };
@@ -149,8 +165,8 @@ const styles = StyleSheet.create({
   notificationButton: {
     borderWidth: 1,
     borderColor: '#03084a',
-    borderRadius: 20,
-    padding: 10,
+    borderRadius: 16,
+    padding: 8,
     marginRight: 1,
     backgroundColor: 'transparent',
     justifyContent: 'center',
@@ -159,11 +175,11 @@ const styles = StyleSheet.create({
   },
   notificationBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: 6,
+    right: 6,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#ff4444',
     borderWidth: 1,
     borderColor: 'white',
@@ -171,8 +187,8 @@ const styles = StyleSheet.create({
   logoutButton: {
     borderWidth: 1,
     borderColor: '#03084a',
-    borderRadius: 20,
-    padding: 10,
+    borderRadius: 16,
+    padding: 8,
     marginLeft: 6,
     backgroundColor: 'transparent',
     justifyContent: 'center',

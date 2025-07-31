@@ -19,47 +19,16 @@ export interface DefectByModule {
   percentage: number;
 }
 
-// Default defect by module data
+// Default defect by module data - returns empty array to show "No Data"
 export const getDefaultDefectByModule = (): DefectByModule[] => {
-  return [
-    {
-      moduleId: 1,
-      name: 'Dashboard',
-      value: 19,
-      percentage: 3.63,
-    },
-    {
-      moduleId: 2,
-      name: 'Employee',
-      value: 74,
-      percentage: 14.15,
-    },
-    {
-      moduleId: 3,
-      name: 'Bench',
-      value: 59,
-      percentage: 11.28,
-    },
-    {
-      moduleId: 4,
-      name: 'Configurations',
-      value: 80,
-      percentage: 15.3,
-    },
-    {
-      moduleId: 5,
-      name: 'Project Management',
-      value: 68,
-      percentage: 13.0,
-    },
-  ];
+  return [];
 };
 
 // Helper function to format module data
 export const formatModuleData = (data: any): DefectByModule[] => {
   if (!Array.isArray(data)) {
     console.warn('Module data is not an array:', data);
-    return getDefaultDefectByModule();
+    return [];
   }
 
   return data.map((item: any) => ({
@@ -113,17 +82,22 @@ export const getDefectByModule = async (projectId: number): Promise<DefectByModu
       moduleData = response.data;
     } else {
       console.warn('Unexpected API response structure:', response.data);
-      return getDefaultDefectByModule();
+      return [];
     }
 
     const formattedData = formatModuleData(moduleData);
     console.log('Defect by module integration success:', formattedData.length, 'modules found');
     
+    if (formattedData.length === 0) {
+      console.log('No defect by module data available - will show "No Data" in UI');
+    }
+    
     return formattedData;
   } catch (error) {
     console.error('Defect by module integration error:', error);
+    console.log('Returning empty array due to error - will show "No Data" in UI');
     
-    // Return default data on error
-    return getDefaultDefectByModule();
+    // Return empty array on error to show "No Data"
+    return [];
   }
 }; 

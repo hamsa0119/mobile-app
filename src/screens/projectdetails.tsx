@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import Svg, { Path, Circle, Text as SvgText } from 'react-native-svg';
 import Header from '../components/Header';
+import { getDefectNotifications, getUnreadNotificationsCount } from '../api/notifications';
 import { getAllProjects, Project } from '../api/projectget';
 import { getProjectCardColors, ProjectCardColor, getDefaultProjectCardColor } from '../api/projectcardcolor';
 import { getDefectRemarkRatio, DefectRemarkRatio, getDefaultDefectRemarkRatio, formatPercentage, getRatioStatus, getRatioStatusColor } from '../api/defectremarkratio';
@@ -448,6 +449,8 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [reopenedModalVisible, setReopenedModalVisible] = useState(false);
   const [selectedReopenedData, setSelectedReopenedData] = useState<any>(null);
+  const [defectNotifications, setDefectNotifications] = useState<any[]>([]);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [hasLocalSelection, setHasLocalSelection] = useState(false);
   const [selectionCounter, setSelectionCounter] = useState(0);
 
@@ -466,6 +469,12 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
         console.log(`Fetching defect by module for project: ${currentProject.name} (ID: ${currentProject.id})`);
         const moduleResult = await getDefectByModule(currentProject.id);
         console.log('Defect by module fetched successfully:', moduleResult);
+        
+        // Check if there's any data with value > 0
+        const hasData = moduleResult && moduleResult.length > 0 && moduleResult.some(module => module.value > 0);
+        console.log('Defect by module has data:', hasData, 'Total modules:', moduleResult?.length);
+        console.log('Module details:', moduleResult?.map(module => ({ name: module.name, value: module.value })));
+        
         setDefectByModule(moduleResult);
       } else {
         console.warn('No project ID available for defect by module');
@@ -483,7 +492,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
     fetchProjects();
   }, []);
 
-  // Fetch defect to remark ratio, severity index, defect density, defect type distribution, defect by module, and defect severity breakdown when selected project changes
+  // Fetch defect to remark ratio, severity index, defect density, defect type distribution, defect by module, defect severity breakdown, and notifications when selected project changes
   useEffect(() => {
     if (projects.length > 0 && selected < projects.length) {
       fetchDefectRemarkRatio();
@@ -492,6 +501,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
       fetchDefectTypeDistribution();
       fetchDefectByModule();
       fetchDefectSeverityBreakdown();
+      fetchNotifications();
     }
   }, [selected, projects]);
 
@@ -658,6 +668,12 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
         console.log(`Fetching defect type distribution for project: ${currentProject.name} (ID: ${currentProject.id})`);
         const typeDistributionResult = await getDefectTypeDistribution(currentProject.id);
         console.log('Defect type distribution fetched successfully:', typeDistributionResult);
+        
+        // Check if there's any data with defectCount > 0
+        const hasData = typeDistributionResult && typeDistributionResult.defectTypes.some(dt => dt.defectCount > 0);
+        console.log('Defect type distribution has data:', hasData, 'Total defect types:', typeDistributionResult?.defectTypes?.length);
+        console.log('Defect type details:', typeDistributionResult?.defectTypes?.map(dt => ({ type: dt.defectType, count: dt.defectCount })));
+        
         setDefectTypeDistribution(typeDistributionResult);
       } else {
         console.warn('No project ID available for defect type distribution');
@@ -762,6 +778,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
   const forceUpdate = selectionCounter;
 
   const openModal = (card: any) => {
+    console.log('Opening modal with card data:', card);
     setSelectedCard(card);
     setModalVisible(true);
   };
@@ -883,9 +900,33 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
     }
   };
 
+  const fetchNotifications = async () => {
+    try {
+      const currentProject = projects[selected];
+      if (currentProject && currentProject.id) {
+        console.log(`Fetching notifications for project: ${currentProject.name} (ID: ${currentProject.id})`);
+        const notifications = await getDefectNotifications(currentProject.id);
+        const unreadCount = await getUnreadNotificationsCount(currentProject.id);
+        
+        setDefectNotifications(notifications);
+        setUnreadNotificationsCount(unreadCount);
+        
+        console.log('Notifications fetched successfully:', notifications.length, 'notifications,', unreadCount, 'unread');
+      }
+    } catch (error) {
+      console.warn('Error fetching notifications:', error);
+      setDefectNotifications([]);
+      setUnreadNotificationsCount(0);
+    }
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f7f8fa' }}>
-      <Header onLogout={onLogout} />
+      <Header 
+        onLogout={onLogout} 
+        defects={defectNotifications}
+        hasNotifications={unreadNotificationsCount > 0}
+      />
       <ImageBackground
         source={require('../../assert/foto8.jpg')}
         style={{ flex: 1, width: '100%', height: '100%' }}
@@ -1481,14 +1522,51 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
              <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Defect Distribution by Type</Text>
            </View>
            <View style={{ alignItems: 'center', marginTop: 10 }}>
-             {defectTypeDistribution ? (
+             {(() => {
+               const hasData = defectTypeDistribution && defectTypeDistribution.defectTypes.some(dt => dt.defectCount > 0);
+               console.log('Rendering defect type chart - hasData:', hasData, 'defectTypeDistribution:', defectTypeDistribution);
+               return hasData;
+             })() ? (
                <>
                  {/* Pie Chart */}
                  <View style={styles.smallPieChartContainer}>
                    <Svg width={120} height={120} viewBox="0 0 120 120">
                      {(() => {
+                       if (!defectTypeDistribution) return null;
                        const chartColors = ['#3b82f6', '#10b981', '#fbbf24', '#ef4444', '#8b5cf6', '#f59e0b'];
                        const total = defectTypeDistribution.defectTypes.reduce((sum, dt) => sum + dt.defectCount, 0);
+                       
+                       console.log('Pie chart data:', { total, defectTypes: defectTypeDistribution.defectTypes });
+                       
+                       // Handle case when total is 0
+                       if (total === 0) {
+                         return (
+                           <Circle
+                             cx="60"
+                             cy="60"
+                             r="60"
+                             fill="#f3f4f6"
+                             stroke="#d1d5db"
+                             strokeWidth={2}
+                           />
+                         );
+                       }
+                       
+                       // Handle case when there's only one segment with value > 0
+                       const nonZeroItems = defectTypeDistribution.defectTypes.filter(dt => dt.defectCount > 0);
+                       if (nonZeroItems.length === 1) {
+                         return (
+                           <Circle
+                             cx="60"
+                             cy="60"
+                             r="60"
+                             fill={chartColors[defectTypeDistribution.defectTypes.findIndex(dt => dt.defectCount > 0) % chartColors.length]}
+                             stroke="#fff"
+                             strokeWidth={2}
+                           />
+                         );
+                       }
+                       
                        let currentAngle = 0;
                        
                        return defectTypeDistribution.defectTypes.map((defectType, index) => {
@@ -1497,6 +1575,8 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
                          const startAngle = currentAngle;
                          const endAngle = currentAngle + angle;
                          currentAngle += angle;
+                         
+                         console.log(`Segment ${index}:`, { defectType: defectType.defectType, count: defectType.defectCount, angle, startAngle, endAngle });
                          
                          // Convert angles to radians
                          const startRad = (Math.PI / 180) * startAngle;
@@ -1523,7 +1603,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
                  </View>
 
                  <View style={styles.pieLegend}>
-                   {defectTypeDistribution.defectTypes.map((defectType, index) => (
+                   {defectTypeDistribution?.defectTypes.map((defectType, index) => (
                      <View key={defectType.defectType} style={styles.pieLegendItem}>
                        <View style={[styles.pieLegendDot, { backgroundColor: ['#3b82f6', '#10b981', '#fbbf24', '#ef4444', '#8b5cf6', '#f59e0b'][index % 6] }]} />
                        <Text style={styles.pieLegendLabel}>
@@ -1533,23 +1613,17 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
                    ))}
                  </View>
                  <View style={styles.pieCardFooter}>
-                   <Text style={styles.pieCardFooterTotal}>{defectTypeDistribution.totalDefectCount}</Text>
+                   <Text style={styles.pieCardFooterTotal}>{defectTypeDistribution?.totalDefectCount}</Text>
                    <Text style={styles.pieCardFooterLabel}>Total Defects</Text>
-                   <Text style={styles.pieCardFooterMost}>{defectTypeDistribution.mostCommonDefectCount}</Text>
+                   <Text style={styles.pieCardFooterMost}>{defectTypeDistribution?.mostCommonDefectCount}</Text>
                    <Text style={styles.pieCardFooterMostLabel}>Most Common
-                     <Text style={styles.pieCardFooterMostType}> {defectTypeDistribution.mostCommonDefectType}</Text>
+                     <Text style={styles.pieCardFooterMostType}> {defectTypeDistribution?.mostCommonDefectType}</Text>
                    </Text>
                  </View>
                </>
              ) : (
                <>
-                 {/* Empty Pie Chart */}
-                 <View style={styles.smallPieChartContainer}>
-                   <Svg width={120} height={120} viewBox="0 0 120 120">
-                     {/* Empty chart - just show a gray circle */}
-                     <Circle cx="60" cy="60" r="60" fill="#f3f4f6" />
-                   </Svg>
-                 </View>
+                 {/* No data from backend - don't show pie chart */}
                  <View style={styles.pieLegend}>
                    <Text style={styles.noDataText}>No defect type data available</Text>
                  </View>
@@ -1675,7 +1749,11 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
              <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Defects by Module</Text>
            </View>
            <View style={{ alignItems: 'center', marginTop: 10 }}>
-             {defectByModule && defectByModule.length > 0 ? (
+             {(() => {
+               const hasData = defectByModule && defectByModule.length > 0 && defectByModule.some(module => module.value > 0);
+               console.log('Rendering defect by module chart - hasData:', hasData, 'defectByModule:', defectByModule);
+               return hasData;
+             })() ? (
                <>
                  {/* Pie Chart */}
                  <View style={styles.smallPieChartContainer}>
@@ -1683,6 +1761,38 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
                      {(() => {
                        const chartColors = ['#3b82f6', '#10b981', '#fbbf24', '#ef4444', '#8b5cf6', '#f59e0b'];
                        const total = defectByModule.reduce((sum, module) => sum + module.value, 0);
+                       
+                       console.log('Pie chart data:', { total, modules: defectByModule });
+                       
+                       // Handle case when total is 0
+                       if (total === 0) {
+                         return (
+                           <Circle
+                             cx="60"
+                             cy="60"
+                             r="60"
+                             fill="#f3f4f6"
+                             stroke="#d1d5db"
+                             strokeWidth={2}
+                           />
+                         );
+                       }
+                       
+                       // Handle case when there's only one module with value > 0
+                       const nonZeroModules = defectByModule.filter(module => module.value > 0);
+                       if (nonZeroModules.length === 1) {
+                         return (
+                           <Circle
+                             cx="60"
+                             cy="60"
+                             r="60"
+                             fill={chartColors[defectByModule.findIndex(module => module.value > 0) % chartColors.length]}
+                             stroke="#fff"
+                             strokeWidth={2}
+                           />
+                         );
+                       }
+                       
                        let currentAngle = 0;
                        
                        return defectByModule.map((module, index) => {
@@ -1691,6 +1801,8 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
                          const startAngle = currentAngle;
                          const endAngle = currentAngle + angle;
                          currentAngle += angle;
+                         
+                         console.log(`Module ${index}:`, { name: module.name, value: module.value, angle, startAngle, endAngle });
                          
                          // Convert angles to radians
                          const startRad = (Math.PI / 180) * startAngle;
@@ -1742,15 +1854,9 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
                </>
              ) : (
                <>
-                 {/* Empty Pie Chart */}
-                 <View style={styles.smallPieChartContainer}>
-                   <Svg width={120} height={120} viewBox="0 0 120 120">
-                     {/* Empty chart - just show a gray circle */}
-                     <Circle cx="60" cy="60" r="60" fill="#f3f4f6" />
-                   </Svg>
-                 </View>
+                 {/* No data from backend - don't show pie chart */}
                  <View style={styles.pieLegend}>
-                   <Text style={styles.noDataText}>No module data available</Text>
+                   <Text style={styles.noDataText}>No Data</Text>
                  </View>
                  <View style={styles.pieCardFooter}>
                    <Text style={styles.pieCardFooterTotal}>--</Text>
@@ -1840,32 +1946,91 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ selectedProject, select
                 {(() => {
                   if (!selectedCard?.items) return null;
                   const total = selectedCard.items.reduce((sum: any, item: any) => sum + item.value, 0);
-                  let currentAngle = 0;
-                  return selectedCard.items.map((item: any, idx: any) => {
-                    if (item.value === 0) return null;
-                    const angle = (item.value / total) * 360;
-                    const startAngle = currentAngle;
-                    const endAngle = currentAngle + angle;
-                    currentAngle += angle;
-                    // Convert angles to radians
-                    const startRad = (Math.PI / 180) * startAngle;
-                    const endRad = (Math.PI / 180) * endAngle;
-                    const x1 = 100 + 100 * Math.cos(startRad);
-                    const y1 = 100 + 100 * Math.sin(startRad);
-                    const x2 = 100 + 100 * Math.cos(endRad);
-                    const y2 = 100 + 100 * Math.sin(endRad);
-                    const largeArc = angle > 180 ? 1 : 0;
-                    const pathData = `M100,100 L${x1},${y1} A100,100 0 ${largeArc} 1 ${x2},${y2} Z`;
+                  console.log('Pie chart data:', { total, items: selectedCard.items });
+                  
+                  // Handle case when total is 0 or very small
+                  if (total === 0) {
                     return (
-                      <Path
-                        key={item.label}
-                        d={pathData}
-                        fill={item.color}
-                        stroke="#fff"
-                        strokeWidth={1}
+                      <Circle
+                        cx={100}
+                        cy={100}
+                        r={100}
+                        fill="#f3f4f6"
+                        stroke="#d1d5db"
+                        strokeWidth={2}
                       />
                     );
-                  });
+                  }
+                  
+                  // Handle case when total is 1 (show a simple circle with the dominant color)
+                  const nonZeroItems = selectedCard.items.filter((item: any) => item.value > 0);
+                  if (total === 1) {
+                    // Find the item with value 1 (or the first non-zero item)
+                    const dominantItem = nonZeroItems.find((item: any) => item.value === 1) || nonZeroItems[0];
+                    return (
+                      <Circle
+                        cx={100}
+                        cy={100}
+                        r={100}
+                        fill={dominantItem?.color || '#f3f4f6'}
+                        stroke="#fff"
+                        strokeWidth={2}
+                      />
+                    );
+                  }
+                  
+                  let currentAngle = 0;
+                  const segments = selectedCard.items
+                    .filter((item: any) => item.value > 0)
+                    .map((item: any, idx: any) => {
+                      console.log(`Processing segment ${idx}:`, item);
+                      const angle = (item.value / total) * 360;
+                      const startAngle = currentAngle;
+                      const endAngle = currentAngle + angle;
+                      currentAngle += angle;
+                      
+                      // Convert angles to radians
+                      const startRad = (Math.PI / 180) * startAngle;
+                      const endRad = (Math.PI / 180) * endAngle;
+                      const x1 = 100 + 100 * Math.cos(startRad);
+                      const y1 = 100 + 100 * Math.sin(startRad);
+                      const x2 = 100 + 100 * Math.cos(endRad);
+                      const y2 = 100 + 100 * Math.sin(endRad);
+                      const largeArc = angle > 180 ? 1 : 0;
+                      const pathData = `M100,100 L${x1},${y1} A100,100 0 ${largeArc} 1 ${x2},${y2} Z`;
+                      
+                      return {
+                        key: item.label,
+                        pathData,
+                        color: item.color
+                      };
+                    });
+                  
+                  console.log('Generated segments:', segments);
+                  
+                  // If no segments are generated, show a default circle
+                  if (segments.length === 0) {
+                    return (
+                      <Circle
+                        cx={100}
+                        cy={100}
+                        r={100}
+                        fill="#f3f4f6"
+                        stroke="#d1d5db"
+                        strokeWidth={2}
+                      />
+                    );
+                  }
+                  
+                  return segments.map((segment: any) => (
+                    <Path
+                      key={segment.key}
+                      d={segment.pathData}
+                      fill={segment.color}
+                      stroke="#fff"
+                      strokeWidth={1}
+                    />
+                  ));
                 })()}
               </Svg>
               </View>
