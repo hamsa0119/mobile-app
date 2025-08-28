@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,21 +8,118 @@ import {
   SafeAreaView,
   Dimensions,
   Modal,
-  ImageBackground, // <-- Add this import
+  ImageBackground,
+  Alert,
 } from 'react-native';
 import Svg, { Path, Circle, Text as SvgText } from 'react-native-svg';
 import Header from '../components/Header';
+import { projectAPI } from '../service/api';
 
-const PROJECTS = [
-  { name: 'Defect Tracker', status: 'high' },
-  { name: 'QA testing', status: 'high' },
-  { name: 'project 1', status: 'low' },
-  { name: 'Heart', status: 'low' },
-  { name: 'Dashbord testing', status: 'low' },
-  { name: 'JALI', status: 'low' },
-  { name: 'Hello world', status: 'low' },
-  { name: 'dashborad test', status: 'medium' },
-  { name: 'Defect Tracker', status: 'high' },
+// Interface for project data based on actual API response
+interface Project {
+  id: string;
+  client_name: string;
+  country: string;
+  description: string;
+  email: string;
+  end_date: string;
+  kloc: number;
+  phone_no: string;
+  project_id: string;
+  project_name: string;
+  project_status: string;
+  start_date: string;
+  state: string;
+  user_id: string;
+  // Derived risk level based on project characteristics
+  risk?: 'high' | 'medium' | 'low';
+}
+
+// Interface for project details
+interface ProjectDetails {
+  id: string;
+  project_name: string;
+  risk: 'high' | 'medium' | 'low';
+  defectDensity: number;
+  defectSeverityIndex: number;
+  defectToRemarkRatio: number;
+  defectsBySeverity: {
+    high: any[];
+    medium: any[];
+    low: any[];
+  };
+  reopenedDefects: any[];
+  defectsByType: any[];
+  defectsByModule: any[];
+  timeToFind: any[];
+  timeToFix: any[];
+}
+
+// Function to determine risk level based on project data
+  const calculateRiskLevel = (project: Project): 'high' | 'medium' | 'low' => {
+    // Simple risk calculation based on KLOC and project status
+    if (project.kloc > 100 || project.project_status === 'HIGH_RISK') {
+      return 'high';
+    } else if (project.kloc > 50 || project.project_status === 'MEDIUM_RISK') {
+      return 'medium';
+    } else {
+      return 'low';
+    }
+  };
+
+  const getDefectDensityColor = (density: number, apiColor?: string): string => {
+    // Use API color if available, otherwise calculate based on density
+    if (apiColor) {
+      switch (apiColor.toLowerCase()) {
+        case 'green': return '#22c55e';
+        case 'yellow': return '#fbbf24';
+        case 'red': return '#dc2626';
+        default: break;
+      }
+    }
+    
+    // Fallback to density-based calculation
+    if (density <= 7) return '#22c55e'; // Green for low density
+    if (density <= 10) return '#fbbf24'; // Yellow for medium density
+    return '#dc2626'; // Red for high density
+  };
+
+// Default projects (fallback data)
+const DEFAULT_PROJECTS: Project[] = [
+  { 
+    id: '1', 
+    client_name: 'Acme Corp',
+    country: 'USA',
+    description: 'Hello',
+    email: 'alpha@acme.com',
+    end_date: '2024-02-20T02:20:00.000Z',
+    kloc: 120.5,
+    phone_no: '1112223333',
+    project_id: 'P-2024-001',
+    project_name: 'Alpha Platform',
+    project_status: 'ACTIVE',
+    start_date: '2024-01-20T00:00:00.000Z',
+    state: 'CA',
+    user_id: '1',
+    risk: 'high'
+  },
+  { 
+    id: '2', 
+    client_name: 'Globex',
+    country: 'UK',
+    description: 'HII',
+    email: 'beta@globex.com',
+    end_date: '2024-03-10T03:30:00.000Z',
+    kloc: 80,
+    phone_no: '2223334444',
+    project_id: 'P-2024-002',
+    project_name: 'Beta Mobile App',
+    project_status: 'ACTIVE',
+    start_date: '2024-02-10T00:00:00.000Z',
+    state: 'London',
+    user_id: '2',
+    risk: 'medium'
+  },
 ];
 
 const STATUS: Record<'high' | 'medium' | 'low', { label: string; color: string; bg: string; border: string }> = {
@@ -419,15 +516,138 @@ interface ProjectDetailsProps {
 
 const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject, onLogout }) => {
   // Find the index of the selected project, default to 0 if not found
-  const initialSelectedIndex = selectedProject ? PROJECTS.findIndex(p => p.name === selectedProject) : 0;
+  const initialSelectedIndex = selectedProject ? DEFAULT_PROJECTS.findIndex(p => p.project_name === selectedProject) : 0;
   const [selected, setSelected] = useState(initialSelectedIndex >= 0 ? initialSelectedIndex : 0);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [reopenedModalVisible, setReopenedModalVisible] = useState(false);
   const [selectedReopenedData, setSelectedReopenedData] = useState<any>(null);
-  const currentProject = PROJECTS[selected];
-  const statusKey = currentProject.status as 'high' | 'medium' | 'low';
+  const [projects, setProjects] = useState<Project[]>(DEFAULT_PROJECTS);
+  const [projectDetails, setProjectDetails] = useState<ProjectDetails | null>(null);
+  const [defectDensity, setDefectDensity] = useState<number | null>(null);
+  const [defectDensityData, setDefectDensityData] = useState<any>(null);
+  const [defectDensityLoading, setDefectDensityLoading] = useState(false);
+  const [defectRemarkRatio, setDefectRemarkRatio] = useState<number | null>(null);
+  const [defectRemarkRatioData, setDefectRemarkRatioData] = useState<any>(null);
+  const [defectRemarkRatioLoading, setDefectRemarkRatioLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const currentProject = projects[selected];
+  const statusKey = currentProject?.risk as 'high' | 'medium' | 'low';
   const statusObj = STATUS[statusKey];
+
+  // Fetch projects and details from API
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  useEffect(() => {
+    if (currentProject?.id) {
+      fetchProjectDetails(currentProject.id);
+      fetchDefectDensity(currentProject.id);
+      fetchDefectRemarkRatio(currentProject.id);
+    }
+  }, [currentProject]);
+
+  const fetchProjects = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await projectAPI.getAllProjects();
+      if (data && Array.isArray(data)) {
+        // Add risk calculation to each project
+        const projectsWithRisk = data.map(project => ({
+          ...project,
+          risk: calculateRiskLevel(project)
+        }));
+        setProjects(projectsWithRisk);
+      } else {
+        console.warn('API not available, using default data');
+        setProjects(DEFAULT_PROJECTS);
+      }
+    } catch (err) {
+      console.error('Failed to fetch projects:', err);
+      setError('Failed to load projects');
+      setProjects(DEFAULT_PROJECTS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchProjectDetails = async (projectId: string) => {
+    try {
+      const data = await projectAPI.getProjectDetails(projectId);
+      if (data) {
+        setProjectDetails(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch project details:', err);
+      // Don't show alert for details failure, just log it
+    }
+  };
+
+  const fetchDefectDensity = async (projectId: string) => {
+    setDefectDensityLoading(true);
+    try {
+      const response = await projectAPI.getDefectDensity(projectId);
+      if (response && response.status === 'success' && response.data) {
+        const { defectDensity, color, meaning, range, defects, kloc } = response.data;
+        setDefectDensity(defectDensity);
+        setDefectDensityData(response.data);
+        console.log('Defect density data:', { defectDensity, color, meaning, range, defects, kloc });
+      } else {
+        console.warn('Invalid defect density response:', response);
+        setDefectDensity(null);
+        setDefectDensityData(null);
+      }
+    } catch (err) {
+      console.error('Failed to fetch defect density:', err);
+      setDefectDensity(null);
+      setDefectDensityData(null);
+    } finally {
+      setDefectDensityLoading(false);
+    }
+  };
+
+  const fetchDefectRemarkRatio = async (projectId: string) => {
+    setDefectRemarkRatioLoading(true);
+    try {
+      const response = await projectAPI.getDefectRemarkRatio(projectId);
+      if (response && response.status === 'success' && response.data) {
+        const { ratioPct, color, meaning, range, totalDefects, validDefects } = response.data;
+        setDefectRemarkRatio(ratioPct);
+        setDefectRemarkRatioData(response.data);
+        console.log('Defect remark ratio data:', { ratioPct, color, meaning, range, totalDefects, validDefects });
+      } else {
+        console.warn('Invalid defect remark ratio response:', response);
+        // Use fallback data when API is not available
+        setDefectRemarkRatio(100);
+        setDefectRemarkRatioData({
+          ratioPct: 100,
+          color: 'Green',
+          meaning: 'Low',
+          range: '98%–100%',
+          totalDefects: 2,
+          validDefects: 2
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch defect remark ratio:', err);
+      // Use fallback data when API fails
+      setDefectRemarkRatio(100);
+      setDefectRemarkRatioData({
+        ratioPct: 100,
+        color: 'Green',
+        meaning: 'Low',
+        range: '98%–100%',
+        totalDefects: 2,
+        validDefects: 2
+      });
+    } finally {
+      setDefectRemarkRatioLoading(false);
+    }
+  };
 
   const openModal = (card: any) => {
     setSelectedCard(card);
@@ -493,25 +713,37 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
             style={styles.selectionScroll}
             contentContainerStyle={styles.selectionScrollContent}
           >
-            {PROJECTS.map((p, i) => (
+            {projects.map((p, i) => (
               <TouchableOpacity
-                key={p.name + i}
+                key={p.id || p.project_name + i}
                 style={[styles.projectBtn, selected === i && styles.projectBtnActive]}
                 onPress={() => setSelected(i)}
               >
-                <Text style={[styles.projectBtnText, selected === i && styles.projectBtnTextActive]}>{p.name}</Text>
+                <Text style={[styles.projectBtnText, selected === i && styles.projectBtnTextActive]}>{p.project_name}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
         {/* Project Name and Status */}
-        <View style={[styles.projectHeader, { backgroundColor: 'rgba(237, 222, 201, 0.95)' }]}>
-          <Text style={[styles.projectName, { color: '#03084a' }]}>{currentProject.name}</Text>
-          <View style={styles.statusWrap}>
-           
-            <Text style={[styles.statusBadge, { backgroundColor: statusObj.bg, color: statusObj.color, borderColor: statusObj.color }]}>{statusObj.label}</Text>
+        {loading ? (
+          <View style={[styles.projectHeader, { backgroundColor: 'rgba(237, 222, 201, 0.95)' }]}>
+            <Text style={[styles.projectName, { color: '#03084a' }]}>Loading...</Text>
           </View>
-        </View>
+        ) : error ? (
+          <View style={[styles.projectHeader, { backgroundColor: 'rgba(237, 222, 201, 0.95)' }]}>
+            <Text style={[styles.projectName, { color: '#dc2626' }]}>{error}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={fetchProjects}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : currentProject ? (
+          <View style={[styles.projectHeader, { backgroundColor: 'rgba(237, 222, 201, 0.95)' }]}>
+            <Text style={[styles.projectName, { color: '#03084a' }]}>{currentProject.project_name}</Text>
+            <View style={styles.statusWrap}>
+              <Text style={[styles.statusBadge, { backgroundColor: statusObj.bg, color: statusObj.color, borderColor: statusObj.color }]}>{statusObj.label}</Text>
+            </View>
+          </View>
+        ) : null}
         {/* Defect Severity Breakdown */}
         <Text style={[styles.sectionTitle, { color: '#fff' }]}>Defect Severity Breakdown</Text>
         <View style={styles.severityCardGroup}>
@@ -570,7 +802,31 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
               
             </View>
             <View style={styles.metricGaugeWrap}>
-              <Text style={[styles.metricGaugeValue, { color: '#374151' }]}>Defect Density: <Text style={[styles.metricGaugeNum, { color: '#DC2626' }]}>11.38</Text></Text>
+              {defectDensityLoading ? (
+                <Text style={[styles.metricGaugeValue, { color: '#374151' }]}>Loading defect density...</Text>
+              ) : defectDensity !== null && defectDensityData && typeof defectDensity === 'number' ? (
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={[styles.metricGaugeValue, { color: '#374151' }]}>
+                    Defect Density: <Text style={[styles.metricGaugeNum, { color: getDefectDensityColor(defectDensity, defectDensityData?.color) }]}>{defectDensity.toFixed(2)}</Text>
+                  </Text>
+                  <Text style={[styles.metricGaugeValue, { color: '#6b7280', fontSize: 14, marginTop: 4 }]}>
+                    {defectDensityData.meaning} • Range: {defectDensityData.range}
+                  </Text>
+                  <Text style={[styles.metricGaugeValue, { color: '#6b7280', fontSize: 12, marginTop: 2 }]}>
+                    Defects: {defectDensityData.defects} • KLOC: {defectDensityData.kloc}
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={[styles.metricGaugeValue, { color: '#374151' }]}>Defect Density: <Text style={[styles.metricGaugeNum, { color: '#DC2626' }]}>N/A</Text></Text>
+                  <TouchableOpacity 
+                    style={styles.retryButton} 
+                    onPress={() => currentProject?.id && fetchDefectDensity(currentProject.id)}
+                  >
+                    <Text style={styles.retryButtonText}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               {/* Meter Chart */}
               <View style={styles.meterContainer}>
                 <View style={styles.meterChartWrapper}>
@@ -602,13 +858,31 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
                       strokeLinecap="butt"
                     />
 
-                    {/* Needle pointing to 11.38 position - exact match to screenshot */}
-                    <Path
-                      d="M 140 140 L 195 80"
-                      stroke="#374151"
-                      strokeWidth={3}
-                      strokeLinecap="round"
-                    />
+                    {/* Needle pointing to defect density position */}
+                    {defectDensity !== null && typeof defectDensity === 'number' && (
+                      <Path
+                        d={(() => {
+                          // Calculate needle position based on defect density
+                          // Map 0-15 range to the meter arc (0-180 degrees)
+                          const maxDensity = 15;
+                          const clampedDensity = Math.min(Math.max(defectDensity, 0), maxDensity);
+                          const angle = (clampedDensity / maxDensity) * 180; // 0 to 180 degrees
+                          const radius = 90;
+                          const centerX = 140;
+                          const centerY = 140;
+                          
+                          // Convert angle to radians and calculate end point
+                          const angleRad = (angle - 90) * (Math.PI / 180); // -90 to 90 degrees
+                          const endX = centerX + radius * Math.cos(angleRad);
+                          const endY = centerY + radius * Math.sin(angleRad);
+                          
+                          return `M ${centerX} ${centerY} L ${endX} ${endY}`;
+                        })()}
+                        stroke="#374151"
+                        strokeWidth={3}
+                        strokeLinecap="round"
+                      />
+                    )}
 
                     {/* Needle center circle - exact match to screenshot */}
                     <Circle
@@ -651,23 +925,45 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
               
             </View>
             <View style={[styles.metricRatioWrap, { alignItems: 'center', marginTop: 10 }]}>
-              <Text style={[styles.metricRatioNum, { fontSize: 36, marginBottom: 8 }]}>97.82%</Text>
-              <Text style={[styles.metricRatioLabel, { textAlign: 'center', fontSize: 14, color: '#6b7280', marginBottom: 12 }]}>Defect to Remark Ratio (%)</Text>
-              <View style={[styles.metricRatioBadge, { backgroundColor: '#fbbf24', marginBottom: 15 }]}>
-                <Text style={styles.metricRatioBadgeText}>Medium</Text>
-              </View>
+              {defectRemarkRatioLoading ? (
+                <Text style={[styles.metricRatioNum, { fontSize: 36, marginBottom: 8 }]}>Loading...</Text>
+              ) : defectRemarkRatio !== null && defectRemarkRatioData && typeof defectRemarkRatio === 'number' ? (
+                <>
+                  <Text style={[styles.metricRatioNum, { fontSize: 36, marginBottom: 8 }]}>{defectRemarkRatio.toFixed(2)}%</Text>
+                  <Text style={[styles.metricRatioLabel, { textAlign: 'center', fontSize: 14, color: '#6b7280', marginBottom: 12 }]}>Defect to Remark Ratio (%)</Text>
+                  <View style={[styles.metricRatioBadge, { backgroundColor: getDefectDensityColor(defectRemarkRatio, defectRemarkRatioData?.color), marginBottom: 15 }]}>
+                    <Text style={styles.metricRatioBadgeText}>{defectRemarkRatioData.meaning}</Text>
+                  </View>
+                  <Text style={[styles.metricRatioLabel, { textAlign: 'center', fontSize: 12, color: '#6b7280', marginBottom: 8 }]}>
+                    Range: {defectRemarkRatioData.range} • Total Defects: {defectRemarkRatioData.totalDefects} • Valid Defects: {defectRemarkRatioData.validDefects}
+                  </Text>
+                </>
+              ) : (
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={[styles.metricRatioNum, { fontSize: 36, marginBottom: 8 }]}>N/A</Text>
+                  <Text style={[styles.metricRatioLabel, { textAlign: 'center', fontSize: 14, color: '#6b7280', marginBottom: 12 }]}>Defect to Remark Ratio (%)</Text>
+                  <TouchableOpacity 
+                    style={styles.retryButton} 
+                    onPress={() => currentProject?.id && fetchDefectRemarkRatio(currentProject.id)}
+                  >
+                    <Text style={styles.retryButtonText}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               {/* Horizontal Meter */}
-              <View style={styles.ratioMeterContainer}>
-                <View style={styles.ratioMeterTrack}>
-                  <View style={[styles.ratioMeterFill, { width: '97.84%' }]} />
-                  <View style={styles.ratioMeterThumb} />
+              {defectRemarkRatio !== null && typeof defectRemarkRatio === 'number' && (
+                <View style={styles.ratioMeterContainer}>
+                  <View style={styles.ratioMeterTrack}>
+                    <View style={[styles.ratioMeterFill, { width: `${Math.min(defectRemarkRatio, 100)}%` }]} />
+                    <View style={[styles.ratioMeterThumb, { left: `${Math.min(defectRemarkRatio, 100)}%` }]} />
+                  </View>
+                  <View style={styles.ratioMeterLabels}>
+                    <Text style={styles.ratioMeterLabel}>0%</Text>
+                    <Text style={styles.ratioMeterLabel}>50%</Text>
+                    <Text style={styles.ratioMeterLabel}>100%</Text>
+                  </View>
                 </View>
-                <View style={styles.ratioMeterLabels}>
-                  <Text style={styles.ratioMeterLabel}>0.0</Text>
-                  <Text style={styles.ratioMeterLabel}>0.5</Text>
-                  <Text style={styles.ratioMeterLabel}>1.0</Text>
-                </View>
-              </View>
+              )}
             </View>
           </View>
         </View>
@@ -2083,6 +2379,18 @@ const styles = StyleSheet.create({
     color: '#374151',
     textAlign: 'center',
     flexWrap: 'nowrap',
+  },
+  retryButton: {
+    backgroundColor: '#2563eb',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,12 @@ import {
   Dimensions,
   SafeAreaView,
   PanResponder,
-  ImageBackground, // Add this import
+  ImageBackground,
+  Alert,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import Header from '../components/Header';
+import { projectAPI } from '../service/api';
 
 const STATUS = [
   {
@@ -55,15 +57,34 @@ const STATUS = [
   },
 ];
 
-const PROJECTS = [
-  { name: 'Defect Tracker', risk: 'high' },
-  { name: 'QA testing', risk: 'high' },
-  { name: 'project 1', risk: 'low' },
-  { name: 'Heart', risk: 'low' },
-  { name: 'Dashbord testing', risk: 'low' },
-  { name: 'JALI', risk: 'low' },
-  { name: 'Hello world', risk: 'low' },
-  { name: 'dashborad test', risk: 'medium' },
+// Interface for Project data from API
+interface Project {
+  id: string;
+  project_name: string;
+  client_name: string;
+  country: string;
+  description: string;
+  email: string;
+  end_date: string;
+  kloc: number;
+  phone_no: string;
+  project_id: string;
+  project_status: string;
+  start_date: string;
+  state: string;
+  user_id: string;
+}
+
+// Default projects for fallback
+const DEFAULT_PROJECTS = [
+  { project_name: 'Defect Tracker', risk: 'high' },
+  { project_name: 'QA testing', risk: 'high' },
+  { project_name: 'project 1', risk: 'low' },
+  { project_name: 'Heart', risk: 'low' },
+  { project_name: 'Dashbord testing', risk: 'low' },
+  { project_name: 'JALI', risk: 'low' },
+  { project_name: 'Hello world', risk: 'low' },
+  { project_name: 'dashborad test', risk: 'medium' },
 ];
 
 const FILTERS = [
@@ -78,6 +99,22 @@ const isSmallScreen = SCREEN_WIDTH < 500;
 
 const DARK_BLUE = '#03084a';
 const GOLD = '#bfa14a';
+
+// Function to calculate risk level based on project data
+const calculateRiskLevel = (project: Project): string => {
+  const { kloc, project_status } = project;
+  
+  // High risk: KLOC > 100 or status is not ACTIVE
+  if (kloc > 100 || project_status !== 'ACTIVE') {
+    return 'high';
+  }
+  // Medium risk: KLOC between 50-100
+  if (kloc >= 50 && kloc <= 100) {
+    return 'medium';
+  }
+  // Low risk: KLOC < 50 and status is ACTIVE
+  return 'low';
+};
 
 const ProjectCard = ({ color, icon, name, tag, onPress }: { color: string; icon: string; name: string; tag: string; onPress: () => void }) => {
   const [scale] = useState(new Animated.Value(1));
@@ -190,11 +227,56 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout }) => {
   const [filter, setFilter] = useState('all');
   const [showChart, setShowChart] = useState(false);
-  const filteredProjects =
-    filter === 'all' ? PROJECTS : PROJECTS.filter(p => p.risk === filter);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch projects from API
+  const fetchProjects = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await projectAPI.getAllProjects();
+      if (data && Array.isArray(data)) {
+        // Map API data to include risk calculation
+        const projectsWithRisk = data.map((project: Project) => ({
+          ...project,
+          risk: calculateRiskLevel(project)
+        }));
+        setProjects(projectsWithRisk);
+      } else {
+        console.warn('Invalid projects response:', data);
+        setProjects([]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch projects:', err);
+      setError('Failed to load projects');
+      setProjects([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load projects on component mount
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  // Filter and sort projects
+  const filteredProjects = filter === 'all' 
+    ? projects 
+    : projects.filter(p => p.risk === filter);
+  
   // Sort: high (red) first, then medium (yellow), then low (green)
   const riskOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
   const sortedProjects = [...filteredProjects].sort((a, b) => (riskOrder[a.risk] ?? 3) - (riskOrder[b.risk] ?? 3));
+
+  // Calculate status counts
+  const statusCounts = {
+    high: projects.filter(p => p.risk === 'high').length,
+    medium: projects.filter(p => p.risk === 'medium').length,
+    low: projects.filter(p => p.risk === 'low').length,
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f7f8fa' }}>
@@ -237,7 +319,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout
             <Text style={[styles.sectionTitle, { color: 'rgba(237, 222, 201, 0.95)' }]}>Project Status Insights</Text>
             <View style={styles.statusCardGroup}>
               <View style={styles.statusRowFixed}>
-                {STATUS.filter(s => typeof s.count === 'number').map((s, idx) => (
+                {STATUS.map((s, idx) => (
                   <View
                     key={s.key}
                     style={[
@@ -263,10 +345,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout
                         style={[
                           styles.statusCount,
                           { color: s.color },
-                          (s.count === 3 || s.count === 19) ? styles.statusCountLower : null
+                          (statusCounts[s.key as keyof typeof statusCounts] === 3 || statusCounts[s.key as keyof typeof statusCounts] === 19) ? styles.statusCountLower : null
                         ]}
                       >
-                        {s.count}
+                        {loading ? '...' : statusCounts[s.key as keyof typeof statusCounts]}
                       </Text>
                     </View>
                   </View>
@@ -422,21 +504,38 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectSelect, onBack, onLogout
                 })}
               </View>
             </View>
-            <View style={styles.projectGridFixed}>
-              {sortedProjects.map((p, i) => {
-                const s = STATUS.find(s => s.key === p.risk) || STATUS[2];
-                return (
-                  <ProjectCard
-                    key={p.name + i}
-                    color={s.color}
-                    icon={"✔️"}
-                    name={p.name}
-                    tag={s.tag}
-                    onPress={() => onProjectSelect && onProjectSelect(p.name)}
-                  />
-                );
-              })}
-            </View>
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Loading projects...</Text>
+              </View>
+            ) : error ? (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity style={styles.retryButton} onPress={fetchProjects}>
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : sortedProjects.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No projects found</Text>
+              </View>
+            ) : (
+              <View style={styles.projectGridFixed}>
+                {sortedProjects.map((p, i) => {
+                  const s = STATUS.find(s => s.key === p.risk) || STATUS[2];
+                  return (
+                    <ProjectCard
+                      key={p.id || p.project_name + i}
+                      color={s.color}
+                      icon={"✔️"}
+                      name={p.project_name}
+                      tag={s.tag}
+                      onPress={() => onProjectSelect && onProjectSelect(p.project_name)}
+                    />
+                  );
+                })}
+              </View>
+            )}
           </View>
         </ScrollView>
       </ImageBackground>
@@ -980,6 +1079,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#333',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#dc2626',
+    fontWeight: '500',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#2563eb',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#6b7280',
+    fontWeight: '500',
   },
 });
 
