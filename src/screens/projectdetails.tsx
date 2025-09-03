@@ -9,7 +9,7 @@ import {
   Dimensions,
   Modal,
   ImageBackground,
-  Alert,
+  Alert
 } from 'react-native';
 import Svg, { Path, Circle, Text as SvgText } from 'react-native-svg';
 import Header from '../components/Header';
@@ -491,6 +491,7 @@ const CustomLineChart = ({ data, color, width: chartWidth, height }: any) => {
                   />
                 )}
               </View>
+
             );
           })}
         </View>
@@ -515,6 +516,47 @@ interface ProjectDetailsProps {
 }
 
 const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject, onLogout }) => {
+  // State for defect severity index
+  const [defectSeverityIndex, setDefectSeverityIndex] = useState<any>(null);
+  const [defectSeverityIndexLoading, setDefectSeverityIndexLoading] = useState(false);
+  const [defectSeverityIndexError, setDefectSeverityIndexError] = useState<string | null>(null);
+
+  // Defect Severity Summary state/hooks
+  const [severitySummary, setSeveritySummary] = useState<any>(null);
+  const [severitySummaryLoading, setSeveritySummaryLoading] = useState(false);
+  const [severitySummaryError, setSeveritySummaryError] = useState<string | null>(null);
+
+  // Fetch defect severity index when current project changes
+  useEffect(() => {
+    const fetchDefectSeverityIndex = async () => {
+      if (!currentProject?.id) return;
+      setDefectSeverityIndexLoading(true);
+      setDefectSeverityIndexError(null);
+      try {
+        const data = await projectAPI.getDefectSeverityIndex(currentProject.id);
+        setDefectSeverityIndex(data);
+        console.log('Defect Severity Index:', data);
+      } catch (err) {
+        setDefectSeverityIndexError('Failed to load defect severity index');
+        setDefectSeverityIndex(null);
+      } finally {
+        setDefectSeverityIndexLoading(false);
+      }
+    };
+    fetchDefectSeverityIndex();
+  }, [currentProject]);
+
+  // Fetch defect severity summary when current project changes
+  useEffect(() => {
+    if (!currentProject?.id) return;
+    setSeveritySummaryLoading(true);
+    setSeveritySummaryError(null);
+    projectAPI.getDefectSeveritySummary(currentProject.id)
+      .then(res => setSeveritySummary(res?.data || null))
+      .catch(() => setSeveritySummaryError('Failed to load defect severity summary'))
+      .finally(() => setSeveritySummaryLoading(false));
+  }, [currentProject]);
+
   // Find the index of the selected project, default to 0 if not found
   const initialSelectedIndex = selectedProject ? DEFAULT_PROJECTS.findIndex(p => p.project_name === selectedProject) : 0;
   const [selected, setSelected] = useState(initialSelectedIndex >= 0 ? initialSelectedIndex : 0);
@@ -534,6 +576,25 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
   const [error, setError] = useState<string | null>(null);
 
   const currentProject = projects[selected];
+  // Fetch defect severity index when current project changes
+  useEffect(() => {
+    const fetchDefectSeverityIndex = async () => {
+      if (!currentProject?.id) return;
+      setDefectSeverityIndexLoading(true);
+      setDefectSeverityIndexError(null);
+      try {
+        const data = await projectAPI.getDefectSeverityIndex(currentProject.id);
+        setDefectSeverityIndex(data);
+        console.log('Defect Severity Index:', data);
+      } catch (err) {
+        setDefectSeverityIndexError('Failed to load defect severity index');
+        setDefectSeverityIndex(null);
+      } finally {
+        setDefectSeverityIndexLoading(false);
+      }
+    };
+    fetchDefectSeverityIndex();
+  }, [currentProject]);
   const statusKey = currentProject?.risk as 'high' | 'medium' | 'low';
   const statusObj = STATUS[statusKey];
 
@@ -544,7 +605,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
 
   useEffect(() => {
     if (currentProject?.id) {
-      fetchProjectDetails(currentProject.id);
+  // fetchProjectDetails(currentProject.id); // Disabled to ignore 404 error
       fetchDefectDensity(currentProject.id);
       fetchDefectRemarkRatio(currentProject.id);
     }
@@ -747,51 +808,62 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
         {/* Defect Severity Breakdown */}
         <Text style={[styles.sectionTitle, { color: '#fff' }]}>Defect Severity Breakdown</Text>
         <View style={styles.severityCardGroup}>
-        {DEFECT_CARDS.map(card => (
-          <View
-            key={card.key}
-            style={[
-              styles.severityCard,
-              {
-                borderColor: card.color,
-                backgroundColor: '#fff',
-                marginVertical: 6,
-                marginHorizontal: 8,
-                minHeight: 50,
-                maxHeight: 220,
-                width: '98%',
-                alignSelf: 'center',
-                borderWidth: 3,
-              },
-            ]}
-          >
-            <View style={styles.severityCardHeader}>
-              <Text style={[styles.severityCardTitle, { color: card.color }]}>{card.title}</Text>
-              <Text style={styles.severityCardTotal}>Total: <Text style={{ fontWeight: 'bold' }}>{card.total}</Text></Text>
-            </View>
-            <View style={styles.severityCardDefectsRow}>
-              <View style={styles.severityCardDefectsCol}>
-                {card.items.filter(item => ['REOPEN', 'NEW', 'OPEN', 'FIXED'].includes(item.label)).map(item => (
-                  <View key={item.label} style={styles.severityCardDefectItem}>
-                    <View style={[styles.severityCardDot, { backgroundColor: item.color }]} />
-                    <Text style={styles.severityCardDefectLabel}>{item.label} <Text style={styles.severityCardDefectValue}>{item.value}</Text></Text>
+          {severitySummaryLoading ? (
+            <Text style={{ color: '#374151', fontSize: 18, margin: 12 }}>Loading...</Text>
+          ) : severitySummaryError ? (
+            <Text style={{ color: '#dc2626', fontSize: 16, margin: 12 }}>{severitySummaryError}</Text>
+          ) : severitySummary && Array.isArray(severitySummary.breakdown) ? (
+            severitySummary.breakdown.map((card: any) => (
+              <View
+                key={card.severity}
+                style={[
+                  styles.severityCard,
+                  {
+                    borderColor: card.color || '#888',
+                    backgroundColor: '#fff',
+                    marginVertical: 6,
+                    marginHorizontal: 8,
+                    minHeight: 50,
+                    maxHeight: 220,
+                    width: '98%',
+                    alignSelf: 'center',
+                    borderWidth: 3,
+                  },
+                ]}
+              >
+                <View style={styles.severityCardHeader}>
+                  <Text style={[styles.severityCardTitle, { color: card.color || '#222' }]}>Defects on {card.severity?.charAt(0).toUpperCase() + card.severity?.slice(1)}</Text>
+                  <Text style={styles.severityCardTotal}>Total: <Text style={{ fontWeight: 'bold' }}>{card.total}</Text></Text>
+                </View>
+                <View style={styles.severityCardDefectsRow}>
+                  <View style={styles.severityCardDefectsCol}>
+                    {['REOPEN', 'NEW', 'OPEN', 'FIXED'].map(label => {
+                      const item = card.statuses?.find((s: any) => s.label === label);
+                      return item ? (
+                        <View key={label} style={styles.severityCardDefectItem}>
+                          <View style={[styles.severityCardDot, { backgroundColor: item.color || '#888' }]} />
+                          <Text style={styles.severityCardDefectLabel}>{item.label} <Text style={styles.severityCardDefectValue}>{item.value}</Text></Text>
+                        </View>
+                      ) : null;
+                    })}
                   </View>
-                ))}
-              </View>
-              <View style={styles.severityCardDefectsCol}>
-                {card.items.filter(item => ['CLOSED', 'REJECTED', 'DUPLICATE'].includes(item.label)).map(item => (
-                  <View key={item.label} style={styles.severityCardDefectItem}>
-                    <View style={[styles.severityCardDot, { backgroundColor: item.color }]} />
-                    <Text style={styles.severityCardDefectLabel}>{item.label} <Text style={styles.severityCardDefectValue}>{item.value}</Text></Text>
+                  <View style={styles.severityCardDefectsCol}>
+                    {['CLOSED', 'REJECTED', 'DUPLICATE'].map(label => {
+                      const item = card.statuses?.find((s: any) => s.label === label);
+                      return item ? (
+                        <View key={label} style={styles.severityCardDefectItem}>
+                          <View style={[styles.severityCardDot, { backgroundColor: item.color || '#888' }]} />
+                          <Text style={styles.severityCardDefectLabel}>{item.label} <Text style={styles.severityCardDefectValue}>{item.value}</Text></Text>
+                        </View>
+                      ) : null;
+                    })}
                   </View>
-                ))}
+                </View>
               </View>
-            </View>
-            <TouchableOpacity style={[styles.severityCardButton, { backgroundColor: '#03084a' }]} onPress={() => openModal(card)}>
-              <Text style={[styles.severityCardButtonText, { color: '#fff' }]}>View Chart</Text>
-            </TouchableOpacity>
-          </View>
-        ))}
+            ))
+          ) : (
+            <Text style={{ color: '#374151', fontSize: 16, margin: 12 }}>No data available</Text>
+          )}
         </View>
         {/* Defect Density Section */}
         
@@ -859,30 +931,61 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
                     />
 
                     {/* Needle pointing to defect density position */}
-                    {defectDensity !== null && typeof defectDensity === 'number' && (
-                      <Path
-                        d={(() => {
-                          // Calculate needle position based on defect density
-                          // Map 0-15 range to the meter arc (0-180 degrees)
-                          const maxDensity = 15;
-                          const clampedDensity = Math.min(Math.max(defectDensity, 0), maxDensity);
-                          const angle = (clampedDensity / maxDensity) * 180; // 0 to 180 degrees
-                          const radius = 90;
-                          const centerX = 140;
-                          const centerY = 140;
-                          
-                          // Convert angle to radians and calculate end point
-                          const angleRad = (angle - 90) * (Math.PI / 180); // -90 to 90 degrees
-                          const endX = centerX + radius * Math.cos(angleRad);
-                          const endY = centerY + radius * Math.sin(angleRad);
-                          
-                          return `M ${centerX} ${centerY} L ${endX} ${endY}`;
-                        })()}
-                        stroke="#374151"
-                        strokeWidth={3}
-                        strokeLinecap="round"
-                      />
-                    )}
+                    {defectDensity !== null && typeof defectDensity === 'number' && (() => {
+                      // Green: 0-7, Yellow: 7-10, Red: 10-15
+                      // Green: 0-7 (0-112.5deg), Yellow: 7-10 (112.5-150deg), Red: 10-15 (150-180deg)
+                      // Map 0-7 to -90deg to 37.5deg, 7-10 to 37.5deg to 90deg, 10-15 to 90deg to 180deg
+                      const minDensity = 0;
+                      const greenMax = 7;
+                      const yellowMax = 10;
+                      const maxDensity = 15;
+                      let angle;
+                      if (defectDensity <= greenMax) {
+                        // Green: 0-7 maps to -90deg to 37.5deg (75% of arc)
+                        angle = ((defectDensity - minDensity) / (greenMax - minDensity)) * 127.5 - 90;
+                      } else if (defectDensity <= yellowMax) {
+                        // Yellow: 7-10 maps to 37.5deg to 90deg (20% of arc)
+                        angle = ((defectDensity - greenMax) / (yellowMax - greenMax)) * 52.5 + 37.5;
+                      } else {
+                        // Red: 10-15 maps to 90deg to 180deg (remaining arc)
+                        angle = ((defectDensity - yellowMax) / (maxDensity - yellowMax)) * 90 + 90;
+                      }
+                      const radius = 90;
+                      const centerX = 140;
+                      const centerY = 140;
+                      const angleRad = angle * (Math.PI / 180);
+                      const endX = centerX + radius * Math.cos(angleRad);
+                      const endY = centerY + radius * Math.sin(angleRad);
+                      // Arrow base (shorter radius)
+                      const baseRadius = 75;
+                      const baseX = centerX + baseRadius * Math.cos(angleRad);
+                      const baseY = centerY + baseRadius * Math.sin(angleRad);
+                      // Arrow width
+                      const arrowWidth = 12;
+                      // Perpendicular angle for arrow width
+                      const perpAngleRad1 = angleRad + Math.PI / 2;
+                      const perpAngleRad2 = angleRad - Math.PI / 2;
+                      const leftX = baseX + (arrowWidth / 2) * Math.cos(perpAngleRad1);
+                      const leftY = baseY + (arrowWidth / 2) * Math.sin(perpAngleRad1);
+                      const rightX = baseX + (arrowWidth / 2) * Math.cos(perpAngleRad2);
+                      const rightY = baseY + (arrowWidth / 2) * Math.sin(perpAngleRad2);
+                      return (
+                        <>
+                          {/* Needle line */}
+                          <Path
+                            d={`M ${centerX} ${centerY} L ${endX} ${endY}`}
+                            stroke="#374151"
+                            strokeWidth={3}
+                            strokeLinecap="round"
+                          />
+                          {/* Arrowhead triangle */}
+                          <Path
+                            d={`M ${endX} ${endY} L ${leftX} ${leftY} L ${rightX} ${rightY} Z`}
+                            fill="#374151"
+                          />
+                        </>
+                      );
+                    })()}
 
                     {/* Needle center circle - exact match to screenshot */}
                     <Circle
@@ -904,16 +1007,23 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
         </View>
 
         {/* Defect Severity Index Section */}
-        <View style={styles.severityCardGroup}>
-          <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
-            <View style={styles.severityCardHeader}>
-              <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Defect Severity Index</Text>
-              
-            </View>
-            <View style={[styles.metricScoreWrap, { alignItems: 'center', marginTop: 10 }]}>
-              <Text style={[styles.metricScoreNum, { color: '#fbbf24', fontSize: 32, marginBottom: 8 }]}>45</Text>
-              <Text style={[styles.metricScoreLabel, { textAlign: 'center', fontSize: 14, color: '#6b7280' }]}>Weighted severity score (higher = more severe defects)</Text>
-            </View>
+        <View style={{ marginVertical: 13, padding: 0, borderRadius: 14, backgroundColor: '#e7dbc7', alignSelf: 'center', width: '90%' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 10, margin: 20, paddingVertical: 14, paddingHorizontal: 4, alignItems: 'center' }}>
+            <Text style={{ color: '#181c4a', fontWeight: 'bold', fontSize: 24, textAlign: 'center', fontFamily: 'System', marginBottom: 8 }}>Defect Severity Index</Text>
+            {defectSeverityIndexLoading ? (
+              <Text style={{ color: '#374151', fontSize: 38, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>Loading...</Text>
+            ) : defectSeverityIndexError ? (
+              <Text style={{ color: '#dc2626', fontSize: 20, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>{defectSeverityIndexError}</Text>
+            ) : defectSeverityIndex ? (
+              <>
+                <Text style={{ color: '#fbbf24', fontSize: 56, fontWeight: 'bold', textAlign: 'center', marginBottom: 8, fontFamily: 'System' }}>{defectSeverityIndex.severityIndexPct}</Text>
+                <Text style={{ color: '#6b7280', fontSize: 20, textAlign: 'center', fontFamily: 'System', marginTop: 0 }}>
+                  Weighted severity score (higher = more severe defects)
+                </Text>
+              </>
+            ) : (
+              <Text style={{ color: '#374151', fontSize: 20, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>N/A</Text>
+            )}
           </View>
         </View>
 
@@ -1071,71 +1181,9 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
          </View>
        </View>
 
-       {/* Defect Distribution by Type Section */}
-       <View style={styles.severityCardGroup}>
-         <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
-           <View style={styles.severityCardHeader}>
-             <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>{CHART_CARDS[1].title}</Text>
-           </View>
-           <View style={{ alignItems: 'center', marginTop: 10 }}>
-             {/* Pie Chart */}
-             <View style={styles.smallPieChartContainer}>
-               <Svg width={120} height={120} viewBox="0 0 120 120">
-                 {(() => {
-                   const typeData = PIE_CARDS[1];
-                   const total = typeData.chartData.reduce((sum: number, value: number) => sum + value, 0);
-                   let currentAngle = 0;
-                   
-                   return typeData.chartData.map((value: number, index: number) => {
-                     if (value === 0) return null;
-                     const angle = (value / total) * 360;
-                     const startAngle = currentAngle;
-                     const endAngle = currentAngle + angle;
-                     currentAngle += angle;
-                     
-                     // Convert angles to radians
-                     const startRad = (Math.PI / 180) * startAngle;
-                     const endRad = (Math.PI / 180) * endAngle;
-                     const x1 = 60 + 60 * Math.cos(startRad);
-                     const y1 = 60 + 60 * Math.sin(startRad);
-                     const x2 = 60 + 60 * Math.cos(endRad);
-                     const y2 = 60 + 60 * Math.sin(endRad);
-                     const largeArc = angle > 180 ? 1 : 0;
-                     const pathData = `M60,60 L${x1},${y1} A60,60 0 ${largeArc} 1 ${x2},${y2} Z`;
-                     
-                     return (
-                       <Path
-                         key={index}
-                         d={pathData}
-                         fill={typeData.chartColors[index]}
-                         stroke="#fff"
-                         strokeWidth={1}
-                       />
-                     );
-                   });
-                 })()}
-               </Svg>
-             </View>
-
-             <View style={styles.pieLegend}>
-               {(CHART_CARDS[1].legend ?? []).map(item => (
-                 <View key={item.label} style={styles.pieLegendItem}>
-                   <View style={[styles.pieLegendDot, { backgroundColor: item.color }]} />
-                   <Text style={styles.pieLegendLabel}>{item.label}</Text>
-                 </View>
-               ))}
-             </View>
-             <View style={styles.pieCardFooter}>
-               <Text style={styles.pieCardFooterTotal}>{CHART_CARDS[1]?.total}</Text>
-               <Text style={styles.pieCardFooterLabel}>Total Defects</Text>
-               <Text style={styles.pieCardFooterMost}>{CHART_CARDS[1]?.mostCommon?.value}</Text>
-               <Text style={styles.pieCardFooterMostLabel}>Most Common
-                 <Text style={styles.pieCardFooterMostType}> {CHART_CARDS[1]?.mostCommon?.label}</Text>
-               </Text>
-             </View>
-           </View>
-         </View>
-       </View>
+  {/* Defect Distribution by Type Section (API) */}
+  <DefectDistributionByType currentProject={currentProject} />
+  <DefectsByModule currentProject={currentProject} />
 
        {/* Time to Find Defects Section */}
        <View style={styles.severityCardGroup}>
@@ -1235,74 +1283,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
          </View>
        </View>
 
-       {/* Defects by Module Section */}
-       <View style={styles.severityCardGroup}>
-         <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}>
-           <View style={styles.severityCardHeader}>
-             <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>{CHART_CARDS[4].title}</Text>
-           </View>
-           <View style={{ alignItems: 'center', marginTop: 10 }}>
-             {/* Pie Chart */}
-             <View style={styles.largePieChartContainer}>
-               <Svg width={180} height={180} viewBox="0 0 180 180">
-                 {(() => {
-                   const moduleData = PIE_CARDS[2];
-                   const total = moduleData.chartData.reduce((sum: number, value: number) => sum + value, 0);
-                   let currentAngle = 0;
-                   
-                   return moduleData.chartData.map((value: number, index: number) => {
-                     if (value === 0) return null;
-                     const angle = (value / total) * 360;
-                     const startAngle = currentAngle;
-                     const endAngle = currentAngle + angle;
-                     currentAngle += angle;
-                     
-                     // Convert angles to radians
-                     const startRad = (Math.PI / 180) * startAngle;
-                     const endRad = (Math.PI / 180) * endAngle;
-                     const x1 = 90 + 90 * Math.cos(startRad);
-                     const y1 = 90 + 90 * Math.sin(startRad);
-                     const x2 = 90 + 90 * Math.cos(endRad);
-                     const y2 = 90 + 90 * Math.sin(endRad);
-                     const largeArc = angle > 180 ? 1 : 0;
-                     const pathData = `M90,90 L${x1},${y1} A90,90 0 ${largeArc} 1 ${x2},${y2} Z`;
-                     
-                     return (
-                       <Path
-                         key={index}
-                         d={pathData}
-                         fill={moduleData.chartColors[index]}
-                         stroke="#fff"
-                         strokeWidth={1}
-                       />
-                     );
-                   });
-                 })()}
-               </Svg>
-             </View>
-
-             {/* Legend */}
-             <View style={styles.moduleLegend}>
-               {(CHART_CARDS[4].legend ?? []).map(item => (
-                 <View key={item.label} style={styles.moduleLegendItem}>
-                   <View style={[styles.moduleLegendDot, { backgroundColor: item.color }]} />
-                   <Text style={styles.moduleLegendLabel}>{item.label}</Text>
-                 </View>
-               ))}
-             </View>
-
-             {/* Footer */}
-             <View style={styles.pieCardFooter}>
-               <Text style={styles.pieCardFooterTotal}>{CHART_CARDS[4]?.total}</Text>
-               <Text style={styles.pieCardFooterLabel}>Total Defects</Text>
-               <Text style={styles.pieCardFooterMost}>{CHART_CARDS[4]?.mostCommon?.value}</Text>
-               <Text style={styles.pieCardFooterMostLabel}>Most Common
-                 <Text style={styles.pieCardFooterMostType}> {CHART_CARDS[4]?.mostCommon?.label}</Text>
-               </Text>
-             </View>
-           </View>
-         </View>
-       </View>
+       
       </ScrollView>
       </ImageBackground>
       {/* Modal for Reopened Defects */}
@@ -1417,6 +1398,209 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ onBack, selectedProject
   );
 };
 
+export default ProjectDetails;
+
+// --- Defect Distribution by Type Component ---
+const DEFECT_TYPE_COLORS = ['#3b82f6', '#10b981', '#fbbf24', '#ef4444', '#8b5cf6', '#f59e0b'];
+
+interface DefectDistributionByTypeProps {
+  currentProject: any;
+}
+
+function DefectDistributionByType(props: DefectDistributionByTypeProps) {
+  const { currentProject } = props;
+  const [data, setData] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!currentProject?.id) return;
+    setLoading(true);
+    setError(null);
+    projectAPI.getDefectDistributionByType(currentProject.id)
+      .then(res => setData(res))
+      .catch(() => setError('Failed to load defect distribution'))
+      .finally(() => setLoading(false));
+  }, [currentProject]);
+
+  // Adapt to new API response structure
+  const distribution = data?.data?.distribution || [];
+  const total = data?.data?.totalValidDefects || 0;
+  let mostCommon = { value: 0, label: '' };
+  if (distribution.length > 0) {
+    const max = distribution.reduce((a, b) => (a.count > b.count ? a : b));
+    mostCommon = { value: max.count, label: max.defectType };
+  }
+
+  return (
+    <View style={styles.severityCardGroup}>
+      <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}> 
+        <View style={styles.severityCardHeader}>
+          <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Defect Distribution by Type</Text>
+        </View>
+        <View style={{ alignItems: 'center', marginTop: 10 }}>
+          {/* Pie Chart */}
+          <View style={styles.smallPieChartContainer}>
+            {loading ? (
+              <Text>Loading...</Text>
+            ) : error ? (
+              <Text style={{ color: '#dc2626' }}>{error}</Text>
+            ) : (
+              <Svg width={120} height={120} viewBox="0 0 120 120">
+                {(() => {
+                  let currentAngle = 0;
+                  return distribution.map((item: any, index: number) => {
+                    if (!item.count) return null;
+                    const angle = (item.count / total) * 360;
+                    const startAngle = currentAngle;
+                    const endAngle = currentAngle + angle;
+                    currentAngle += angle;
+                    const startRad = (Math.PI / 180) * startAngle;
+                    const endRad = (Math.PI / 180) * endAngle;
+                    const x1 = 60 + 60 * Math.cos(startRad);
+                    const y1 = 60 + 60 * Math.sin(startRad);
+                    const x2 = 60 + 60 * Math.cos(endRad);
+                    const y2 = 60 + 60 * Math.sin(endRad);
+                    const largeArc = angle > 180 ? 1 : 0;
+                    const pathData = `M60,60 L${x1},${y1} A60,60 0 ${largeArc} 1 ${x2},${y2} Z`;
+                    return (
+                      <Path
+                        key={index}
+                        d={pathData}
+                        fill={DEFECT_TYPE_COLORS[index % DEFECT_TYPE_COLORS.length]}
+                        stroke="#fff"
+                        strokeWidth={1}
+                      />
+                    );
+                  });
+                })()}
+              </Svg>
+            )}
+          </View>
+          {/* Legend */}
+          <View style={styles.pieLegend}>
+            {distribution.map((item: any, idx: number) => (
+              <View key={item.defectType} style={styles.pieLegendItem}>
+                <View style={[styles.pieLegendDot, { backgroundColor: DEFECT_TYPE_COLORS[idx % DEFECT_TYPE_COLORS.length] }]} />
+                <Text style={styles.pieLegendLabel}>{item.defectType}: {item.count} ({item.percentage}%)</Text>
+              </View>
+            ))}
+          </View>
+          <View style={styles.pieCardFooter}>
+            <Text style={styles.pieCardFooterTotal}>{total}</Text>
+            <Text style={styles.pieCardFooterLabel}>Total Valid Defects</Text>
+            <Text style={styles.pieCardFooterMost}>{mostCommon.value}</Text>
+            <Text style={styles.pieCardFooterMostLabel}>Most Common
+              <Text style={styles.pieCardFooterMostType}> {mostCommon.label}</Text>
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// --- Defects By Module Component ---
+const MODULE_COLORS = ['#3b82f6', '#10b981', '#fbbf24', '#ef4444', '#8b5cf6', '#f59e0b'];
+
+function DefectsByModule({ currentProject }: { currentProject: any }) {
+  const [data, setData] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!currentProject?.id) return;
+    setLoading(true);
+    setError(null);
+    projectAPI.getDefectByModule(currentProject.id)
+      .then(res => {
+        console.log('DefectsByModule API response:', res);
+        setData(res);
+      })
+      .catch((err) => {
+        console.log('DefectsByModule API error:', err);
+        setError('Failed to load defects by module');
+      })
+      .finally(() => {
+        console.log('DefectsByModule loading finished');
+        setLoading(false);
+      });
+  }, [currentProject]);
+
+  const distribution = data?.data?.distribution || [];
+  console.log('DefectsByModule distribution:', distribution);
+  const total = data?.data?.totalValidDefects || 0;
+  let mostCommon = { value: 0, label: '' };
+  if (Array.isArray(distribution) && distribution.length > 0) {
+    const max = distribution.reduce((a: any, b: any) => (a.count > b.count ? a : b));
+    mostCommon = { value: max.count, label: max.module };
+  }
+
+  return (
+    <View style={styles.severityCardGroup}>
+      <View style={[styles.severityCard, { borderColor: 'transparent', backgroundColor: '#fff' }]}> 
+        <View style={styles.severityCardHeader}>
+          <Text style={[styles.severityCardTitle, { color: '#03084a' }]}>Defects by Module</Text>
+        </View>
+        <View style={{ alignItems: 'center', marginTop: 10 }}>
+          {/* Pie Chart */}
+          <View style={styles.smallPieChartContainer}>
+            {loading ? (
+              <Text>Loading...</Text>
+            ) : error ? (
+              <Text style={{ color: '#dc2626' }}>{error}</Text>
+            ) : Array.isArray(distribution) && distribution.length === 0 ? (
+              <Text>No data</Text>
+            ) : (
+              <Svg width={120} height={120} viewBox="0 0 120 120">
+                {(() => {
+                  let startAngle = 0;
+                  return distribution.map((item: any, idx: number) => {
+                    const angle = (item.percentage / 100) * 360;
+                    const x1 = 60 + 60 * Math.cos((Math.PI * startAngle) / 180);
+                    const y1 = 60 + 60 * Math.sin((Math.PI * startAngle) / 180);
+                    const x2 = 60 + 60 * Math.cos((Math.PI * (startAngle + angle)) / 180);
+                    const y2 = 60 + 60 * Math.sin((Math.PI * (startAngle + angle)) / 180);
+                    const largeArc = angle > 180 ? 1 : 0;
+                    const pathData = `M60,60 L${x1},${y1} A60,60 0 ${largeArc} 1 ${x2},${y2} Z`;
+                    startAngle += angle;
+                    return (
+                      <Path
+                        key={idx}
+                        d={pathData}
+                        fill={MODULE_COLORS[idx % MODULE_COLORS.length]}
+                        stroke="#fff"
+                        strokeWidth={1}
+                      />
+                    );
+                  });
+                })()}
+              </Svg>
+            )}
+          </View>
+          {/* Legend */}
+          <View style={styles.pieLegend}>
+            {distribution.map((item: any, idx: number) => (
+              <View key={item.module} style={styles.pieLegendItem}>
+                <View style={[styles.pieLegendDot, { backgroundColor: MODULE_COLORS[idx % MODULE_COLORS.length] }]} />
+                <Text style={styles.pieLegendLabel}>{item.module}: {item.count} ({item.percentage}%)</Text>
+              </View>
+            ))}
+          </View>
+          <View style={styles.pieCardFooter}>
+            <Text style={styles.pieCardFooterTotal}>{total}</Text>
+            <Text style={styles.pieCardFooterLabel}>Total Valid Defects</Text>
+            <Text style={styles.pieCardFooterMost}>{mostCommon.value}</Text>
+            <Text style={styles.pieCardFooterMostLabel}>Most Common
+              <Text style={styles.pieCardFooterMostType}> {mostCommon.label}</Text>
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   backButton: {
     alignSelf: 'flex-start',
@@ -1499,7 +1683,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height:  2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 2,
@@ -1546,6 +1730,7 @@ const styles = StyleSheet.create({
   defectCardsRowMobile: {
     flexDirection: 'column',
     alignItems: 'center',
+    shadowOffset: { width: 0, height: 4 },
     gap: 12,
   },
   defectCard: {
@@ -2393,5 +2578,3 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
-
-export default ProjectDetails;

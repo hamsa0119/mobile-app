@@ -1,8 +1,9 @@
+
 import axios from 'axios';
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: 'http://10.0.2.2:3000/api', // Use 10.0.2.2 for Android emulator to access localhost
+  baseURL: 'http://192.168.1.50:3000/api', // Use 10.0.2.2 for Android emulator to access localhost
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -37,6 +38,38 @@ api.interceptors.response.use(
 
 // Project API functions
 export const projectAPI = {
+  // Get defect severity summary for a project
+  getDefectSeveritySummary: async (projectId: string) => {
+    try {
+      const response = await api.get(`/defects/defect-severity-summary?projectId=${projectId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching defect severity summary:', error);
+      return null;
+    }
+  },
+  // Get defect by module for a project
+  getDefectByModule: async (projectId: string) => {
+    try {
+      // Use the backend route http://localhost:3000/api/defects/defect-by-module?projectId=1
+      // For emulator/device, baseURL is already set, so just use the path
+      const response = await api.get(`/defects/defect-by-module?projectId=${projectId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching defect by module:', error);
+      return null;
+    }
+  },
+  // Get defect distribution by type for a project
+  getDefectDistributionByType: async (projectId: string) => {
+    try {
+      const response = await api.get(`/defects/defect-distribution-by-type?projectId=${projectId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching defect distribution by type:', error);
+      return null;
+    }
+  },
   // Get all projects
   getAllProjects: async () => {
     try {
@@ -89,6 +122,17 @@ export const projectAPI = {
       return response.data;
     } catch (error) {
       console.error('Error fetching defect remark ratio:', error);
+      return null;
+    }
+  },
+
+  // Get defect severity index for a project
+  getDefectSeverityIndex: async (projectId: string) => {
+    try {
+      const response = await api.get(`/defects/severity-index?projectId=${projectId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching defect severity index:', error);
       return null;
     }
   },
