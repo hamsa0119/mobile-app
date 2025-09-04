@@ -1423,13 +1423,27 @@ function DefectDistributionByType(props: DefectDistributionByTypeProps) {
       .finally(() => setLoading(false));
   }, [currentProject]);
 
-  // Adapt to new API response structure
-  const distribution = data?.data?.distribution || [];
-  const total = data?.data?.totalValidDefects || 0;
+  // Adapt to actual API response structure
+  const defectTypes = data?.data?.defectTypes || [];
+  const totalDefectCount = data?.data?.totalDefectCount || 0;
+  const mostCommonDefectType = data?.data?.mostCommonDefectType || '';
+  const mostCommonDefectCount = data?.data?.mostCommonDefectCount || 0;
+  
+  // Transform API data to match component expectations
+  const distribution = defectTypes.map((item: any) => ({
+    defectType: item.defectType,
+    count: item.defectCount,
+    percentage: item.percentage
+  }));
+  
   let mostCommon = { value: 0, label: '' };
   if (distribution.length > 0) {
-    const max = distribution.reduce((a, b) => (a.count > b.count ? a : b));
-    mostCommon = { value: max.count, label: max.defectType };
+    if (mostCommonDefectCount > 0 && mostCommonDefectType) {
+      mostCommon = { value: mostCommonDefectCount, label: mostCommonDefectType };
+    } else {
+      const max = distribution.reduce((a: any, b: any) => (a.count > b.count ? a : b));
+      mostCommon = { value: max.count, label: max.defectType };
+    }
   }
 
   return (
@@ -1451,7 +1465,7 @@ function DefectDistributionByType(props: DefectDistributionByTypeProps) {
                   let currentAngle = 0;
                   return distribution.map((item: any, index: number) => {
                     if (!item.count) return null;
-                    const angle = (item.count / total) * 360;
+                    const angle = (item.count / totalDefectCount) * 360;
                     const startAngle = currentAngle;
                     const endAngle = currentAngle + angle;
                     currentAngle += angle;
@@ -1487,7 +1501,7 @@ function DefectDistributionByType(props: DefectDistributionByTypeProps) {
             ))}
           </View>
           <View style={styles.pieCardFooter}>
-            <Text style={styles.pieCardFooterTotal}>{total}</Text>
+            <Text style={styles.pieCardFooterTotal}>{totalDefectCount}</Text>
             <Text style={styles.pieCardFooterLabel}>Total Valid Defects</Text>
             <Text style={styles.pieCardFooterMost}>{mostCommon.value}</Text>
             <Text style={styles.pieCardFooterMostLabel}>Most Common
